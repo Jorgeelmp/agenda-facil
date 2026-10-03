@@ -20,7 +20,7 @@ export function setUnauthorizedHandler(handler) {
   onUnauthorized = handler
 }
 
-export async function request(path, { method = 'GET', body, auth = true } = {}) {
+export async function request(path, { method = 'GET', body, auth = true, signal } = {}) {
   const headers = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
@@ -33,9 +33,11 @@ export async function request(path, { method = 'GET', body, auth = true } = {}) 
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
     })
-  } catch {
-    throw new ApiError(0, 'Não foi possível conectar ao servidor. O backend está rodando?')
+  } catch (error) {
+    if (error.name === 'AbortError') throw error
+    throw new ApiError(0, 'Não foi possível conectar ao servidor. Tente novamente.')
   }
 
   const text = await response.text()
@@ -64,6 +66,28 @@ function defaultMessage(status) {
 export const authApi = {
   login: (email, senha) => request('/auth/login', { method: 'POST', body: { email, senha }, auth: false }),
   register: (dados) => request('/auth/register', { method: 'POST', body: dados, auth: false }),
+}
+
+export const prestadorApi = {
+  listar: (ativo, options) => request(`/prestadores${ativo === undefined ? '' : `?ativo=${ativo}`}`, options),
+  buscar: (id, options) => request(`/prestadores/${id}`, options),
+  meuPerfil: (options) => request('/prestadores/me', options),
+  criar: (body) => request('/prestadores', { method: 'POST', body }),
+  atualizar: (id, body) => request(`/prestadores/${id}`, { method: 'PUT', body }),
+  alterarStatus: (id, ativo) => request(`/prestadores/${id}/status`, { method: 'PATCH', body: { ativo } }),
+  excluir: (id) => request(`/prestadores/${id}`, { method: 'DELETE' }),
+  servicos: (id, options) => request(`/prestadores/${id}/servicos`, options),
+  disponibilidade: (id, servicoId, data, options) => {
+    const query = new URLSearchParams({ servicoId, data })
+    return request(`/prestadores/${id}/disponibilidade?${query}`, options)
+  },
+}
+
+export const horarioApi = {
+  listar: (prestadorId, options) => request(`/prestadores/${prestadorId}/horarios`, options),
+  criar: (prestadorId, body) => request(`/prestadores/${prestadorId}/horarios`, { method: 'POST', body }),
+  atualizar: (prestadorId, id, body) => request(`/prestadores/${prestadorId}/horarios/${id}`, { method: 'PUT', body }),
+  excluir: (prestadorId, id) => request(`/prestadores/${prestadorId}/horarios/${id}`, { method: 'DELETE' }),
 }
 
 export function decodeToken(token) {

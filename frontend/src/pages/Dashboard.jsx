@@ -1,5 +1,6 @@
 import { Logo } from '../components/Logo'
 import { useAuth } from '../context/AuthContext'
+import { NavLink, Outlet } from 'react-router-dom'
 
 export default function Dashboard() {
   const { payload, logout } = useAuth()
@@ -17,8 +18,13 @@ export default function Dashboard() {
         </div>
       </header>
 
+      <nav className="dash__nav" aria-label="Navegação principal">
+        <NavLink to="/dashboard" end>Prestadores</NavLink>
+        {payload?.tipo === 'PRESTADOR' && <NavLink to="/dashboard/meu-negocio">Meu negócio</NavLink>}
+      </nav>
+
       <main className="dash__main">
-        <h1>Dashboard</h1>
+        <Outlet />
       </main>
     </div>
   )

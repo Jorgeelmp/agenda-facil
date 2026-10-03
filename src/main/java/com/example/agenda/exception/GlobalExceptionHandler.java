@@ -1,15 +1,20 @@
 package com.example.agenda.exception;
 
-import com.example.agenda.dto.response.ErrorResponse;
+import java.util.List;
+
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
+import com.example.agenda.dto.response.ErrorResponse;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -31,6 +36,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
         return build(status, ex.getReason(), List.of());
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
+        MissingServletRequestParameterException.class})
+    public ResponseEntity<ErrorResponse> handleInvalidRequest(Exception ex) {
+        return build(HttpStatus.BAD_REQUEST, "Requisição inválida. Verifique o JSON, os identificadores, as datas e os horários", List.of());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
+        return build(HttpStatus.CONFLICT, "Operação conflita com um registro existente ou com dados vinculados", List.of());
     }
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, List<String> errors) {
