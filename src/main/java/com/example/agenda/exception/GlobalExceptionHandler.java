@@ -3,6 +3,7 @@ package com.example.agenda.exception;
 import java.util.List;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -47,6 +48,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
         return build(HttpStatus.CONFLICT, "Operação conflita com um registro existente ou com dados vinculados", List.of());
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleLockFailure(PessimisticLockingFailureException ex) {
+        return build(HttpStatus.CONFLICT, "Muitas operações simultâneas neste registro. Tente novamente", List.of());
     }
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, List<String> errors) {

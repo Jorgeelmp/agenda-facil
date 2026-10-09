@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Locale;
+
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -54,7 +56,7 @@ public class AuthController {
                                                 LoginRequest request
                                             )
     {
-        UsernamePasswordAuthenticationToken userAndPass = new UsernamePasswordAuthenticationToken(request.email(), request.senha());
+        UsernamePasswordAuthenticationToken userAndPass = new UsernamePasswordAuthenticationToken(normalizarEmail(request.email()), request.senha());
         Authentication authentication = authenticationManager.authenticate(userAndPass);
 
         Usuario usuario = (Usuario) authentication.getPrincipal();
@@ -73,13 +75,14 @@ public class AuthController {
         if (request.tipo() == TipoUsuario.ADMIN) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não é permitido se registrar como ADMIN");
         }
-        if (usuarioRepository.existsByEmail(request.email())) {
+        String email = normalizarEmail(request.email());
+        if (usuarioRepository.existsByEmail(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email já cadastrado");
         }
 
         Usuario novoUsuario = new Usuario();
         novoUsuario.setNome(request.nome());
-        novoUsuario.setEmail(request.email());
+        novoUsuario.setEmail(email);
         novoUsuario.setTelefone(request.telefone());
         novoUsuario.setTipo(request.tipo());
         novoUsuario.setSenha(passwordEncoder.encode(request.senha()));
@@ -93,6 +96,10 @@ public class AuthController {
                             novoUsuario.getTipo()
                         )
                 );
+    }
+
+    private static String normalizarEmail(String email) {
+        return email.strip().toLowerCase(Locale.ROOT);
     }
 
     @GetMapping("/me")

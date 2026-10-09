@@ -211,6 +211,14 @@ a.btn { text-decoration: none; }
 .data-table .form-actions { flex-wrap: nowrap; }
 .availability-slots { display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 16px 0; list-style: none; }
 .availability-slot { padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-subtle); font-variant-numeric: tabular-nums; }
+.availability-slot--button { font: inherit; color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.availability-slot--button:hover:not(:disabled) { border-color: var(--text-3); }
+.availability-slot--button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.availability-slot--button.is-selected { border-color: var(--primary); background: var(--primary); color: var(--primary-fg); }
+.availability-slot--button:disabled { opacity: 0.5; cursor: not-allowed; }
+.badge--danger { color: var(--error-text); background: var(--error-bg); }
+.data-table td.cell-wrap { white-space: normal; min-width: 160px; overflow-wrap: anywhere; }
+.cell-sub { display: block; color: var(--text-2); font-size: 12px; }
 
 @media (max-width: 900px) {
   .business-grid { grid-template-columns: minmax(0, 1fr); }

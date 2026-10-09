@@ -213,4 +213,37 @@ class AuthControllerTest {
                         .content("{\"email\":\"   \",\"senha\":\"   \"}"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void registerGuardaEmailEmMinusculasEDetectaDuplicadoSemDiferenciarCaixa() throws Exception {
+        when(usuarioRepository.existsByEmail("joao@email.com")).thenReturn(true);
+
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"João","email":"Joao@Email.COM","senha":"123456","tipo":"CLIENTE"}
+                                """))
+                .andExpect(status().isConflict());
+
+        when(usuarioRepository.existsByEmail("ana@email.com")).thenReturn(false);
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Ana","email":"Ana@Email.com","senha":"123456","tipo":"CLIENTE"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("ana@email.com"));
+        verify(usuarioRepository).save(org.mockito.ArgumentMatchers.argThat(u -> u.getEmail().equals("ana@email.com")));
+    }
+
+    @Test
+    void loginAceitaEmailComMaiusculasEEspacos() throws Exception {
+        when(usuarioRepository.findUserByEmail("maria@email.com")).thenReturn(Optional.of(usuarioSalvo()));
+
+        String token = login("  Maria@Email.com ", "123456");
+
+        mockMvc.perform(get("/auth/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("maria@email.com"));
+    }
 }

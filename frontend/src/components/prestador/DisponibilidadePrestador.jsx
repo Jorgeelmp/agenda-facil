@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Alert } from '../Alert'
 import { Field } from '../Field'
+import { useAuth } from '../../context/AuthContext'
 import { useApiResource } from '../../hooks/useApiResource'
-import { prestadorApi } from '../../services/api'
+import { agendamentoApi, prestadorApi } from '../../services/api'
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const formatoDia = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'long' })
@@ -41,10 +43,15 @@ function mensagemErro(erro, consulta = false) {
 export default function DisponibilidadePrestador({ prestadorId, ativo, revision = 0 }) {
   const tituloId = useId()
   const servicoCampoId = useId()
+  const observacoesId = useId()
   const consultaId = useRef(0)
+  const { payload } = useAuth()
+  const podeAgendar = payload?.tipo === 'CLIENTE'
   const [selecao, setSelecao] = useState(null)
   const [data, setData] = useState(hojeEmSaoPaulo)
   const [consulta, setConsulta] = useState(null)
+  const [reserva, setReserva] = useState(null)
+  const [aviso, setAviso] = useState(null)
 
   const contexto = `${prestadorId}:${ativo}:${revision}`
   const hoje = hojeEmSaoPaulo()
@@ -67,6 +74,8 @@ export default function DisponibilidadePrestador({ prestadorId, ativo, revision 
   const consultaAtual = consulta?.chave === chaveConsulta ? consulta : null
   const carregandoServicos = servicosRecurso.loading
   const consultando = consultaAtual?.status === 'loading'
+  const avisoAtual = aviso?.chave === chaveConsulta ? aviso : null
+  const reservaAtual = podeAgendar && consultaAtual?.status === 'ready' && reserva?.chave === chaveConsulta ? reserva : null
 
   useEffect(() => {
     consultaId.current += 1
@@ -89,7 +98,13 @@ export default function DisponibilidadePrestador({ prestadorId, ativo, revision 
   async function consultar(evento) {
     evento.preventDefault()
     if (consultando || !ativo || !servico || carregandoServicos) return
+    setAviso(null)
+    await executarConsulta()
+  }
+
+  async function executarConsulta() {
     const numeroConsulta = ++consultaId.current
+    setReserva(null)
 
     if (!dataValida(data, hojeEmSaoPaulo())) {
       setConsulta({ chave: chaveConsulta, status: 'error', erro: 'Escolha uma data válida a partir de hoje.' })
@@ -112,11 +127,38 @@ export default function DisponibilidadePrestador({ prestadorId, ativo, revision 
     }
   }
 
+  async function agendar(evento) {
+    evento.preventDefault()
+    if (!reservaAtual || reservaAtual.enviando) return
+    const { chave, hora, observacoes } = reservaAtual
+    setReserva({ ...reservaAtual, enviando: true, erro: null })
+    try {
+      await agendamentoApi.criar({ servicoId, dataHora: `${data}T${hora}`, observacoes: observacoes.trim() || null })
+      setAviso({
+        chave,
+        type: 'success',
+        mensagem: `Agendamento solicitado para ${formatoDia.format(new Date(`${data}T12:00:00Z`))} às ${formatarHora(hora)}. Aguarde a confirmação do prestador.`,
+      })
+      await executarConsulta()
+    } catch (erro) {
+      if (erro.status === 409) {
+        // Horário tomado por outro cliente ou que coincide com outro agendamento do próprio cliente:
+        // mostra o motivo informado pela API e atualiza a lista para exibir só o que continua livre.
+        setAviso({ chave, type: 'error', mensagem: erro.message || 'Este horário não está mais disponível. Escolha outro horário livre.' })
+        await executarConsulta()
+      } else {
+        setReserva((atual) => atual?.chave === chave ? { ...atual, enviando: false, erro } : atual)
+      }
+    }
+  }
+
   return (
     <section className="panel" aria-labelledby={tituloId}>
       <header className="panel__header">
         <h2 id={tituloId}>Horários disponíveis</h2>
-        <p className="panel__description">Escolha um serviço e um dia para consultar os horários livres.</p>
+        <p className="panel__description">{podeAgendar
+          ? 'Escolha um serviço e um dia, depois selecione um horário livre para agendar.'
+          : 'Escolha um serviço e um dia para consultar os horários livres.'}</p>
       </header>
 
       {!prestadorId ? (
@@ -180,6 +222,10 @@ export default function DisponibilidadePrestador({ prestadorId, ativo, revision 
 
           <div aria-live="polite" aria-busy={Boolean(consultando)}>
             {consultando && <p className="empty-state" role="status">Consultando horários disponíveis…</p>}
+            {avisoAtual && !consultando && <Alert type={avisoAtual.type} message={avisoAtual.mensagem} />}
+            {avisoAtual?.type === 'success' && !consultando && (
+              <p className="panel__description"><Link to="/dashboard/agendamentos">Ver meus agendamentos</Link></p>
+            )}
             {consultaAtual?.status === 'error' && <Alert message={consultaAtual.erro} />}
             {consultaAtual?.status === 'ready' && (
               <>
@@ -191,11 +237,54 @@ export default function DisponibilidadePrestador({ prestadorId, ativo, revision 
                 ) : (
                   <>
                     <ul className="availability-slots" aria-label="Horários livres">
-                      {consultaAtual.resposta.horarios.map((hora) => (
+                      {consultaAtual.resposta.horarios.map((hora) => podeAgendar ? (
+                        <li key={hora}>
+                          <button
+                            type="button"
+                            className={`availability-slot availability-slot--button${reservaAtual?.hora === hora ? ' is-selected' : ''}`}
+                            aria-pressed={reservaAtual?.hora === hora}
+                            disabled={reservaAtual?.enviando}
+                            onClick={() => setReserva({ chave: chaveConsulta, hora, observacoes: reservaAtual?.observacoes ?? '', enviando: false, erro: null })}
+                          >
+                            <time dateTime={hora}>{formatarHora(hora)}</time>
+                          </button>
+                        </li>
+                      ) : (
                         <li className="availability-slot" key={hora}><time dateTime={hora}>{formatarHora(hora)}</time></li>
                       ))}
                     </ul>
-                    <p className="panel__description">Horários de Brasília. Esta consulta não realiza um agendamento; a disponibilidade pode mudar.</p>
+                    <p className="panel__description">{podeAgendar
+                      ? 'Horários de Brasília. A disponibilidade é confirmada novamente no momento do agendamento.'
+                      : 'Horários de Brasília. Esta consulta não realiza um agendamento; a disponibilidade pode mudar.'}</p>
+                    {reservaAtual && (
+                      <form className="form" onSubmit={agendar} aria-label="Confirmar agendamento">
+                        <h3>{servico.nome} às {formatarHora(reservaAtual.hora)}</h3>
+                        <div className="field">
+                          <label className="field__label" htmlFor={observacoesId}>
+                            Observações
+                            <span className="field__hint">Opcional</span>
+                          </label>
+                          <div className="field__control">
+                            <textarea
+                              id={observacoesId}
+                              name="observacoes"
+                              rows={3}
+                              maxLength={500}
+                              value={reservaAtual.observacoes}
+                              disabled={reservaAtual.enviando}
+                              onChange={(evento) => setReserva({ ...reservaAtual, observacoes: evento.target.value })}
+                            />
+                          </div>
+                        </div>
+                        {reservaAtual.erro && <Alert message={reservaAtual.erro.message} errors={reservaAtual.erro.errors} />}
+                        <div className="form-actions">
+                          <button type="submit" className="btn btn--primary" disabled={reservaAtual.enviando}>
+                            {reservaAtual.enviando ? 'Agendando…' : 'Confirmar agendamento'}
+                          </button>
+                          <button type="button" className="btn btn--ghost" disabled={reservaAtual.enviando} onClick={() => setReserva(null)}>Cancelar</button>
+                        </div>
+                      </form>
+                    )}
                   </>
                 )}
               </>

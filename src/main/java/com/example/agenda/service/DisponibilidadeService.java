@@ -43,6 +43,12 @@ public class DisponibilidadeService {
     }
 
     public DisponibilidadeResponse consultar(UUID prestadorId, UUID servicoId, LocalDate data) {
+        return consultar(prestadorId, servicoId, data, null);
+    }
+
+    /** Igual à consulta comum, mas o agendamento informado não conta como ocupado (usado na remarcação). */
+    public DisponibilidadeResponse consultar(UUID prestadorId, UUID servicoId, LocalDate data,
+            UUID ignorarAgendamentoId) {
         if (data == null || data.getYear() < 1 || data.getYear() > 9999) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Data deve estar entre 0001-01-01 e 9999-12-31");
         }
@@ -53,6 +59,22 @@ public class DisponibilidadeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Serviço não pertence ao prestador informado");
         }
 
+        return new DisponibilidadeResponse(prestadorId, servicoId, data, servico.getDuracaoMinutos(),
+                calcularHorarios(prestador, servico, data, ignorarAgendamentoId));
+    }
+
+    /**
+     * Revalida, no momento da gravação, se o horário ainda é um dos horários livres do serviço (RF08).
+     * O agendamento informado em {@code ignorarAgendamentoId} não conta como ocupado (remarcação).
+     */
+    public boolean horarioDisponivel(Servico servico, LocalDateTime dataHora, UUID ignorarAgendamentoId) {
+        return calcularHorarios(servico.getPrestador(), servico, dataHora.toLocalDate(), ignorarAgendamentoId)
+                .contains(dataHora.toLocalTime());
+    }
+
+    private List<LocalTime> calcularHorarios(Prestador prestador, Servico servico, LocalDate data,
+            UUID ignorarAgendamentoId) {
+        UUID prestadorId = prestador.getId();
         List<LocalTime> horarios = new ArrayList<>();
         LocalDateTime agora = LocalDateTime.now(clock);
         if (Boolean.TRUE.equals(prestador.getAtivo()) && Boolean.TRUE.equals(servico.getAtivo())
@@ -61,6 +83,10 @@ public class DisponibilidadeService {
             horarioRepository.findByPrestadorIdAndDiaSemana(prestadorId, diaSemana).ifPresent(horario -> {
                 List<Agendamento> ocupados = agendamentoRepository.findOcupadosNoPeriodo(
                         prestadorId, data.atStartOfDay(), data.plusDays(1).atStartOfDay());
+                if (ignorarAgendamentoId != null) {
+                    ocupados = ocupados.stream()
+                            .filter(agendamento -> !ignorarAgendamentoId.equals(agendamento.getId())).toList();
+                }
                 if (horario.getIntervaloInicio() == null) {
                     adicionarHorarios(data, horario.getHoraInicio(), horario.getHoraFim(),
                             servico.getDuracaoMinutos(), ocupados, agora, horarios);
@@ -72,7 +98,7 @@ public class DisponibilidadeService {
                 }
             });
         }
-        return new DisponibilidadeResponse(prestadorId, servicoId, data, servico.getDuracaoMinutos(), List.copyOf(horarios));
+        return List.copyOf(horarios);
     }
 
     private void adicionarHorarios(LocalDate data, LocalTime inicio, LocalTime fim, int duracao,

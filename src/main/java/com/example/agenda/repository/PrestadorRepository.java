@@ -5,8 +5,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.example.agenda.entity.Prestador;
+
+import jakarta.persistence.LockModeType;
 
 public interface PrestadorRepository extends JpaRepository<Prestador, UUID> {
 
@@ -17,4 +22,9 @@ public interface PrestadorRepository extends JpaRepository<Prestador, UUID> {
     List<Prestador> findAllByOrderByNomeNegocioAsc();
 
     List<Prestador> findByAtivoOrderByNomeNegocioAsc(Boolean ativo);
+
+    // Serializa agendamentos concorrentes do mesmo prestador (RF08).
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Prestador p where p.id = :id")
+    Optional<Prestador> findByIdParaAgendar(@Param("id") UUID id);
 }

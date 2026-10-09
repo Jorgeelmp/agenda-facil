@@ -20,6 +20,7 @@ export default function Dashboard() {
 
       <nav className="dash__nav" aria-label="Navegação principal">
         <NavLink to="/dashboard" end>Prestadores</NavLink>
+        <NavLink to="/dashboard/agendamentos">{payload?.tipo === 'CLIENTE' ? 'Meus agendamentos' : 'Agendamentos'}</NavLink>
         {payload?.tipo === 'PRESTADOR' && <NavLink to="/dashboard/meu-negocio">Meu negócio</NavLink>}
       </nav>
 

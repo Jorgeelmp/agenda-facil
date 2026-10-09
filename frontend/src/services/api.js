@@ -90,6 +90,17 @@ export const horarioApi = {
   excluir: (prestadorId, id) => request(`/prestadores/${prestadorId}/horarios/${id}`, { method: 'DELETE' }),
 }
 
+export const agendamentoApi = {
+  listar: (status, options) => request(`/agendamentos${status ? `?status=${status}` : ''}`, options),
+  buscar: (id, options) => request(`/agendamentos/${id}`, options),
+  // Horários livres para remarcar: o próprio agendamento não conta como ocupado.
+  disponibilidade: (id, data, options) => request(`/agendamentos/${id}/disponibilidade?${new URLSearchParams({ data })}`, options),
+  criar: (body) => request('/agendamentos', { method: 'POST', body }),
+  atualizar: (id, body) => request(`/agendamentos/${id}`, { method: 'PUT', body }),
+  alterarStatus: (id, status) => request(`/agendamentos/${id}/status`, { method: 'PATCH', body: { status } }),
+  excluir: (id) => request(`/agendamentos/${id}`, { method: 'DELETE' }),
+}
+
 export function decodeToken(token) {
   try {
     const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
