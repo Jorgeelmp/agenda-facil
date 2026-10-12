@@ -18,7 +18,6 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
 
     boolean existsByEmail(String email);
 
-    // Serializa agendamentos simultâneos do mesmo cliente para impedir horários sobrepostos.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from Usuario u where u.id = :id")
     Optional<Usuario> findByIdParaAgendar(@Param("id") UUID id);

@@ -524,4 +524,92 @@ class AgendamentoControllerTest {
         agendamentoRepository.saveAndFlush(agendamento);
         mockMvc.perform(autenticado(get(url).param("data", data.toString()), cliente)).andExpect(status().isConflict());
     }
+
+    @Test
+    void confirmarRevalidaDisponibilidadeAposMudancaNoExpediente() throws Exception {
+        Agendamento agendamento = reservar(cliente, LocalTime.of(10, 0), StatusAgendamento.PENDENTE);
+        HorarioFuncionamento segunda = horarioRepository.findByPrestadorIdAndDiaSemana(prestador.getId(), DiaSemana.SEG)
+                .orElseThrow();
+        mockMvc.perform(autenticado(put("/prestadores/" + prestador.getId() + "/horarios/" + segunda.getId()), donoPrestador)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"diaSemana\":\"SEG\",\"horaInicio\":\"13:00\",\"horaFim\":\"16:00\"}"))
+                .andExpect(status().isOk());
+
+        alterarStatus(agendamento, donoPrestador, "CONFIRMADO").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(startsWith("O horário deste agendamento não está mais disponível")));
+        alterarStatus(agendamento, admin, "CONFIRMADO").andExpect(status().isConflict());
+        assertThat(agendamentoRepository.findById(agendamento.getId()).orElseThrow().getStatus())
+                .isEqualTo(StatusAgendamento.PENDENTE);
+
+        mockMvc.perform(autenticado(put("/agendamentos/" + agendamento.getId()), cliente)
+                .contentType(MediaType.APPLICATION_JSON).content(corpo(servico, "2030-01-07T13:00:00", null)))
+                .andExpect(status().isOk());
+        alterarStatus(agendamento, donoPrestador, "CONFIRMADO").andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMADO"));
+    }
+
+    @Test
+    void confirmarRecusaServicoOuPrestadorInativoEHorarioJaPassado() throws Exception {
+        Agendamento agendamento = reservar(cliente, LocalTime.of(10, 0), StatusAgendamento.PENDENTE);
+        servico.setAtivo(false);
+        servicoRepository.saveAndFlush(servico);
+        alterarStatus(agendamento, donoPrestador, "CONFIRMADO").andExpect(status().isConflict());
+
+        servico.setAtivo(true);
+        servicoRepository.saveAndFlush(servico);
+        prestador.setAtivo(false);
+        prestadorRepository.saveAndFlush(prestador);
+        alterarStatus(agendamento, donoPrestador, "CONFIRMADO").andExpect(status().isConflict());
+
+        prestador.setAtivo(true);
+        prestadorRepository.saveAndFlush(prestador);
+        relogio("2030-01-07T14:00:00Z");
+        alterarStatus(agendamento, donoPrestador, "CONFIRMADO").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(startsWith("Não é possível confirmar um agendamento cujo horário já passou")));
+    }
+
+    @Test
+    void confirmarNaoConflitaComOProprioAgendamento() throws Exception {
+        Agendamento agendamento = reservar(cliente, LocalTime.of(9, 0), StatusAgendamento.PENDENTE);
+        reservar(outroCliente, LocalTime.of(10, 0), StatusAgendamento.CONFIRMADO);
+        alterarStatus(agendamento, donoPrestador, "CONFIRMADO").andExpect(status().isOk());
+    }
+
+    @Test
+    void datasForaDoIntervaloSuportadoRetornam400() throws Exception {
+        Agendamento agendamento = reservar(cliente, LocalTime.of(9, 0), StatusAgendamento.PENDENTE);
+        for (String dataHora : new String[]{"+10000-01-03T10:00:00", "+999999999-12-31T10:00:00",
+                "0000-01-01T10:00:00", "-0001-01-01T10:00:00", "-999999999-01-01T10:00:00"}) {
+            agendar(cliente, dataHora).andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors[0]").value("Data e hora devem estar entre 0001-01-01 e 9999-12-31"));
+            mockMvc.perform(autenticado(put("/agendamentos/" + agendamento.getId()), cliente)
+                    .contentType(MediaType.APPLICATION_JSON).content(corpo(servico, dataHora, null)))
+                    .andExpect(status().isBadRequest());
+        }
+        agendar(cliente, "0001-01-01T10:00:00").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Data e hora do agendamento devem estar no futuro"));
+    }
+
+    @Test
+    void errosDeSegurancaERotasSeguemOPadraoDeErro() throws Exception {
+        mockMvc.perform(get("/agendamentos"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value(startsWith("Autenticação necessária")))
+                .andExpect(jsonPath("$.errors").isEmpty());
+        mockMvc.perform(get("/agendamentos").header("Authorization", "Bearer token.invalido.aqui"))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.status").value(401));
+        Agendamento agendamento = reservar(cliente, LocalTime.of(9, 0), StatusAgendamento.PENDENTE);
+        mockMvc.perform(autenticado(delete("/agendamentos/" + agendamento.getId()), cliente))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.message").value("Acesso negado"));
+        mockMvc.perform(autenticado(get("/rota-que-nao-existe"), cliente))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.status").value(404));
+        mockMvc.perform(autenticado(patch("/agendamentos"), cliente))
+                .andExpect(status().isMethodNotAllowed()).andExpect(jsonPath("$.status").value(405));
+        mockMvc.perform(autenticado(post("/agendamentos"), cliente)
+                .contentType(MediaType.TEXT_PLAIN).content("x"))
+                .andExpect(status().isUnsupportedMediaType()).andExpect(jsonPath("$.status").value(415));
+    }
 }

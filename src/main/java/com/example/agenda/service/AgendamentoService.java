@@ -32,6 +32,9 @@ public class AgendamentoService {
 
     private static final String HORARIO_INDISPONIVEL =
             "Horário indisponível. Consulte os horários livres e escolha outro";
+    private static final String HORARIO_NAO_CONFIRMAVEL =
+            "O horário deste agendamento não está mais disponível (expediente, serviço ou prestador foram alterados). "
+                    + "Peça ao cliente para remarcar ou cancele o agendamento";
     private static final String CLIENTE_OCUPADO =
             "Você já possui um agendamento ativo que coincide com este horário";
 
@@ -94,7 +97,6 @@ public class AgendamentoService {
         return AgendamentoResponse.fromEntity(agendamento);
     }
 
-    /** Horários livres para remarcar: o próprio agendamento não conta como ocupado. */
     public DisponibilidadeResponse disponibilidadeParaRemarcar(UUID id, UUID servicoId, LocalDate data,
             JWTUserData userData) {
         Agendamento agendamento = agendamentoRepository.findDetalhadoById(id)
@@ -120,7 +122,6 @@ public class AgendamentoService {
             validarReserva(servico, agendamento.getCliente(), request.dataHora(), agendamento.getId());
             agendamento.setServico(servico);
             agendamento.setDataHora(request.dataHora());
-            // Nova data/serviço precisa ser confirmada novamente pelo prestador.
             agendamento.setStatus(StatusAgendamento.PENDENTE);
         }
         agendamento.setObservacoes(normalizarObservacoes(request.observacoes()));
@@ -144,6 +145,7 @@ public class AgendamentoService {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente o prestador pode confirmar o agendamento");
                 }
                 exigirStatus(atual, novoStatus, StatusAgendamento.PENDENTE);
+                revalidarParaConfirmar(agendamento);
             }
             case CONCLUIDO -> {
                 if (!admin && !prestador) {
@@ -192,10 +194,6 @@ public class AgendamentoService {
         }
     }
 
-    /**
-     * Bloqueia o prestador e depois o cliente até o fim da transação (sempre nessa ordem, evitando deadlock):
-     * reservas simultâneas são processadas em fila e cada uma já enxerga o que a anterior gravou (RF08).
-     */
     private void validarReserva(Servico servico, Usuario cliente, LocalDateTime dataHora, UUID ignorarAgendamentoId) {
         prestadorRepository.findByIdParaAgendar(servico.getPrestador().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prestador não encontrado"));
@@ -216,6 +214,19 @@ public class AgendamentoService {
                 .stream().anyMatch(outro -> !outro.getId().equals(ignorarAgendamentoId));
         if (clienteOcupado) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, CLIENTE_OCUPADO);
+        }
+    }
+
+    private void revalidarParaConfirmar(Agendamento agendamento) {
+        Servico servico = agendamento.getServico();
+        prestadorRepository.findByIdParaAgendar(servico.getPrestador().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prestador não encontrado"));
+        if (!agendamento.getDataHora().isAfter(LocalDateTime.now(clock))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Não é possível confirmar um agendamento cujo horário já passou. Cancele-o");
+        }
+        if (!disponibilidadeService.horarioDisponivel(servico, agendamento.getDataHora(), agendamento.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, HORARIO_NAO_CONFIRMAVEL);
         }
     }
 

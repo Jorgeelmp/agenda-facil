@@ -1,10 +1,11 @@
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert } from '../components/Alert'
 import { Field } from '../components/Field'
 import { useAuth } from '../context/AuthContext'
 import { useApiResource } from '../hooks/useApiResource'
 import { agendamentoApi } from '../services/api'
+import { agoraEmSaoPaulo, formatarHora, separarDataHora } from '../utils/datas'
 
 const STATUS = {
   PENDENTE: { label: 'Pendente', badge: 'badge' },
@@ -16,25 +17,36 @@ const formatoData = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday:
 const formatoDia = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'long' })
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
-function agoraEmSaoPaulo() {
-  const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date())
-  const parte = (tipo) => partes.find((item) => item.type === tipo).value
-  return `${parte('year')}-${parte('month')}-${parte('day')}T${parte('hour')}:${parte('minute')}:${parte('second')}`
-}
-
 function hora(dataHora) {
-  return dataHora.slice(11, 16)
+  const partes = separarDataHora(dataHora)
+  return partes ? formatarHora(partes.hora) : dataHora
 }
 
 function dia(dataHora) {
-  return dataHora.slice(0, 10)
+  return separarDataHora(dataHora)?.data ?? ''
 }
 
 function formatarData(dataHora) {
-  return formatoData.format(new Date(`${dia(dataHora)}T12:00:00Z`))
+  const partes = separarDataHora(dataHora)
+  if (!partes) return dataHora
+  if (!/^\d{4}$/.test(partes.ano)) return `${partes.dia}/${partes.mes}/${partes.ano}`
+  return formatoData.format(new Date(`${partes.data}T12:00:00Z`))
+}
+
+function formatarDiaLongo(dataHora) {
+  const partes = separarDataHora(dataHora)
+  if (!partes || !/^\d{4}$/.test(partes.ano)) return formatarData(dataHora)
+  return formatoDia.format(new Date(`${partes.data}T12:00:00Z`))
+}
+
+function useAgoraEmSaoPaulo(atualizar) {
+  const [agora, setAgora] = useState(agoraEmSaoPaulo)
+  useEffect(() => {
+    if (!atualizar) return undefined
+    const relogio = setInterval(() => setAgora(agoraEmSaoPaulo()), 1000)
+    return () => clearInterval(relogio)
+  }, [atualizar])
+  return atualizar ? agora : agoraEmSaoPaulo()
 }
 
 function ativo(agendamento) {
@@ -54,11 +66,13 @@ export default function Agendamentos() {
   const carregar = useCallback((options) => agendamentoApi.listar(filtro, options), [filtro])
   const { data, loading, error, retry, update } = useApiResource(carregar, `agendamentos:${filtro}`)
   const agendamentos = data ?? []
-  const agora = agoraEmSaoPaulo()
 
   const isCliente = tipo === 'CLIENTE'
   const isPrestador = tipo === 'PRESTADOR'
   const isAdmin = tipo === 'ADMIN'
+  const aguardandoHorario = (isPrestador || isAdmin)
+    && agendamentos.some((item) => item.status === 'CONFIRMADO' && item.dataHora > agoraEmSaoPaulo())
+  const agora = useAgoraEmSaoPaulo(aguardandoHorario)
 
   function substituir(atualizado) {
     update(agendamentos
@@ -225,7 +239,10 @@ export default function Agendamentos() {
 
 function Remarcacao({ agendamento, onCancel, onSaved }) {
   const observacoesId = useId()
-  const [data, setData] = useState(dia(agendamento.dataHora))
+  const [data, setData] = useState(() => {
+    const atual = dia(agendamento.dataHora)
+    return /^\d{4}-\d{2}-\d{2}$/.test(atual) ? atual : agoraEmSaoPaulo().slice(0, 10)
+  })
   const [horarioNovo, setHorarioNovo] = useState('')
   const [observacoes, setObservacoes] = useState(agendamento.observacoes ?? '')
   const [enviando, setEnviando] = useState(false)
@@ -263,7 +280,7 @@ function Remarcacao({ agendamento, onCancel, onSaved }) {
     <form className="form" onSubmit={salvar} aria-label="Remarcar agendamento">
       <h3>Remarcar {agendamento.servicoNome}</h3>
       <p className="panel__description">
-        Atual: {formatoDia.format(new Date(`${dia(agendamento.dataHora)}T12:00:00Z`))} às {hora(agendamento.dataHora)}.
+        Atual: {formatarDiaLongo(agendamento.dataHora)} às {hora(agendamento.dataHora)}.
         Escolha um novo horário ou apenas altere as observações.
       </p>
       <div className="form-grid">
@@ -282,7 +299,7 @@ function Remarcacao({ agendamento, onCancel, onSaved }) {
                       <button type="button" className={`availability-slot availability-slot--button${horarioNovo === item ? ' is-selected' : ''}`}
                         aria-pressed={horarioNovo === item} disabled={enviando || atual}
                         onClick={() => setHorarioNovo(horarioNovo === item ? '' : item)}>
-                        <time dateTime={item}>{item.slice(0, 5)}</time>{atual && ' (atual)'}
+                        <time dateTime={item}>{formatarHora(item)}</time>{atual && ' (atual)'}
                       </button>
                     </li>
                   )
@@ -299,7 +316,7 @@ function Remarcacao({ agendamento, onCancel, onSaved }) {
       {erro && <Alert message={erro.message} errors={erro.errors} />}
       <div className="form-actions">
         <button className="btn btn--primary" type="submit" disabled={enviando}>
-          {enviando ? 'Salvando…' : horarioNovo ? `Remarcar para ${horarioNovo.slice(0, 5)}` : 'Salvar observações'}
+          {enviando ? 'Salvando…' : horarioNovo ? `Remarcar para ${formatarHora(horarioNovo)}` : 'Salvar observações'}
         </button>
         <button className="btn btn--ghost" type="button" onClick={onCancel} disabled={enviando}>Cancelar</button>
       </div>

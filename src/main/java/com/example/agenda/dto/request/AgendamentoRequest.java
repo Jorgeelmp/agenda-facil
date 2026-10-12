@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.example.agenda.validation.RequestDeserializers;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -22,4 +23,9 @@ public record AgendamentoRequest(
         @Pattern(regexp = "[^\\x00]*", message = "Observações contêm caractere nulo inválido")
         @JsonDeserialize(using = RequestDeserializers.StrictString.class)
         String observacoes) {
+
+    @AssertTrue(message = "Data e hora devem estar entre 0001-01-01 e 9999-12-31")
+    public boolean isDataHoraNoIntervalo() {
+        return dataHora == null || (dataHora.getYear() >= 1 && dataHora.getYear() <= 9999);
+    }
 }

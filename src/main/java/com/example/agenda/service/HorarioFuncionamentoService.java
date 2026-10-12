@@ -15,6 +15,7 @@ import com.example.agenda.dto.response.HorarioFuncionamentoResponse;
 import com.example.agenda.entity.HorarioFuncionamento;
 import com.example.agenda.entity.Prestador;
 import com.example.agenda.repository.HorarioFuncionamentoRepository;
+import com.example.agenda.repository.PrestadorRepository;
 
 @Service
 @Transactional(readOnly = true)
@@ -22,17 +23,19 @@ public class HorarioFuncionamentoService {
 
     private final HorarioFuncionamentoRepository horarioRepository;
     private final PrestadorService prestadorService;
+    private final PrestadorRepository prestadorRepository;
 
     public HorarioFuncionamentoService(HorarioFuncionamentoRepository horarioRepository,
-            PrestadorService prestadorService) {
+            PrestadorService prestadorService, PrestadorRepository prestadorRepository) {
         this.horarioRepository = horarioRepository;
         this.prestadorService = prestadorService;
+        this.prestadorRepository = prestadorRepository;
     }
 
     @Transactional
     public HorarioFuncionamentoResponse criar(UUID prestadorId, HorarioFuncionamentoRequest request,
             JWTUserData userData) {
-        Prestador prestador = prestadorService.buscarParaGerenciar(prestadorId, userData);
+        Prestador prestador = buscarParaAlterarAgenda(prestadorId, userData);
         if (horarioRepository.existsByPrestadorIdAndDiaSemana(prestadorId, request.diaSemana())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe horário de funcionamento para este dia");
         }
@@ -57,7 +60,7 @@ public class HorarioFuncionamentoService {
     @Transactional
     public HorarioFuncionamentoResponse atualizar(UUID prestadorId, UUID horarioId,
             HorarioFuncionamentoRequest request, JWTUserData userData) {
-        prestadorService.buscarParaGerenciar(prestadorId, userData);
+        buscarParaAlterarAgenda(prestadorId, userData);
         HorarioFuncionamento horario = buscarEntidade(prestadorId, horarioId);
         if (horarioRepository.existsByPrestadorIdAndDiaSemanaAndIdNot(prestadorId, request.diaSemana(), horarioId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe horário de funcionamento para este dia");
@@ -68,8 +71,14 @@ public class HorarioFuncionamentoService {
 
     @Transactional
     public void excluir(UUID prestadorId, UUID horarioId, JWTUserData userData) {
-        prestadorService.buscarParaGerenciar(prestadorId, userData);
+        buscarParaAlterarAgenda(prestadorId, userData);
         horarioRepository.delete(buscarEntidade(prestadorId, horarioId));
+    }
+
+    private Prestador buscarParaAlterarAgenda(UUID prestadorId, JWTUserData userData) {
+        Prestador prestador = prestadorService.buscarParaGerenciar(prestadorId, userData);
+        prestadorRepository.findByIdParaAgendar(prestadorId);
+        return prestador;
     }
 
     private HorarioFuncionamento buscarEntidade(UUID prestadorId, UUID horarioId) {

@@ -23,7 +23,6 @@ public interface PrestadorRepository extends JpaRepository<Prestador, UUID> {
 
     List<Prestador> findByAtivoOrderByNomeNegocioAsc(Boolean ativo);
 
-    // Serializa agendamentos concorrentes do mesmo prestador (RF08).
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Prestador p where p.id = :id")
     Optional<Prestador> findByIdParaAgendar(@Param("id") UUID id);

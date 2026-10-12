@@ -91,7 +91,6 @@ public class PrestadorService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Prestador possui serviços vinculados. Inative o perfil para preservar o histórico");
         }
-        // Remove também as entidades gerenciadas antes do perfil, mantendo o JPA sincronizado.
         horarioRepository.deleteByPrestadorId(id);
         horarioRepository.flush();
         prestadorRepository.delete(prestador);

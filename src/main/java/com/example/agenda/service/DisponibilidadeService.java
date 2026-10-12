@@ -46,7 +46,6 @@ public class DisponibilidadeService {
         return consultar(prestadorId, servicoId, data, null);
     }
 
-    /** Igual à consulta comum, mas o agendamento informado não conta como ocupado (usado na remarcação). */
     public DisponibilidadeResponse consultar(UUID prestadorId, UUID servicoId, LocalDate data,
             UUID ignorarAgendamentoId) {
         if (data == null || data.getYear() < 1 || data.getYear() > 9999) {
@@ -63,10 +62,6 @@ public class DisponibilidadeService {
                 calcularHorarios(prestador, servico, data, ignorarAgendamentoId));
     }
 
-    /**
-     * Revalida, no momento da gravação, se o horário ainda é um dos horários livres do serviço (RF08).
-     * O agendamento informado em {@code ignorarAgendamentoId} não conta como ocupado (remarcação).
-     */
     public boolean horarioDisponivel(Servico servico, LocalDateTime dataHora, UUID ignorarAgendamentoId) {
         return calcularHorarios(servico.getPrestador(), servico, dataHora.toLocalDate(), ignorarAgendamentoId)
                 .contains(dataHora.toLocalTime());

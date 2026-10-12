@@ -257,3 +257,49 @@ test('filtro de status consulta a API com o status escolhido', async ({ page }) 
   await page.getByLabel('Status').selectOption('CONCLUIDO')
   await expect(page.getByRole('heading', { name: 'Nenhum agendamento com status concluído' })).toBeVisible()
 })
+
+test('botão Concluir aparece sozinho quando chega o horário marcado', async ({ page }) => {
+  const inicio = Math.ceil((Date.now() + 10 * 60_000) / 60_000) * 60_000
+  const emSaoPaulo = (ms) => new Date(ms - 3 * 3_600_000).toISOString().slice(0, 19)
+  await page.clock.install({ time: new Date(inicio - 3000) })
+  await preparar(page, {
+    tipo: 'PRESTADOR',
+    agendamentos: [agendamento({ status: 'CONFIRMADO', dataHora: emSaoPaulo(inicio), dataHoraFim: emSaoPaulo(inicio + 3_600_000) })],
+  })
+  await page.goto('/dashboard/agendamentos')
+  const tabela = page.getByRole('table', { name: 'Lista de agendamentos' })
+  await expect(tabela).toContainText('Confirmado')
+  await expect(tabela.getByRole('button', { name: /^Concluir/ })).toHaveCount(0)
+
+  await page.clock.runFor(4000)
+  await expect(tabela.getByRole('button', { name: /^Concluir/ })).toBeVisible()
+})
+
+test('horários com segundos e milissegundos aparecem completos', async ({ page }) => {
+  const dia = dataFutura()
+  await preparar(page, {
+    agendamentos: [agendamento({ dataHora: `${dia}T09:00:30.5`, dataHoraFim: `${dia}T10:00:30.5` })],
+    horariosLivres: ['09:00:30.5', '10:00:30.25', '11:00:00'],
+  })
+  await page.goto('/dashboard/agendamentos')
+  const tabela = page.getByRole('table', { name: 'Lista de agendamentos' })
+  await expect(tabela).toContainText('09:00:30.5 às 10:00:30.5')
+
+  await page.getByRole('button', { name: /^Remarcar/ }).click()
+  const novos = page.getByRole('list', { name: 'Novos horários livres' })
+  await expect(novos.getByRole('listitem')).toHaveText(['09:00:30.5 (atual)', '10:00:30.25', '11:00'])
+  await novos.getByRole('button', { name: '10:00:30.25' }).click()
+  await expect(page.getByRole('button', { name: 'Remarcar para 10:00:30.25' })).toBeVisible()
+})
+
+test('data fora do intervalo vinda da API não quebra a tela', async ({ page }) => {
+  await preparar(page, {
+    agendamentos: [agendamento({ dataHora: '+10000-01-03T10:00:00', dataHoraFim: '+10000-01-03T11:00:00' })],
+  })
+  await page.goto('/dashboard/agendamentos')
+  const tabela = page.getByRole('table', { name: 'Lista de agendamentos' })
+  await expect(tabela).toContainText('03/01/+10000')
+  await expect(tabela).toContainText('10:00 às 11:00')
+  await page.getByRole('button', { name: /^Remarcar/ }).click()
+  await expect(page.getByRole('form', { name: 'Remarcar agendamento' })).toBeVisible()
+})

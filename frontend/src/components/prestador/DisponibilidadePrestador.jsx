@@ -5,6 +5,7 @@ import { Field } from '../Field'
 import { useAuth } from '../../context/AuthContext'
 import { useApiResource } from '../../hooks/useApiResource'
 import { agendamentoApi, prestadorApi } from '../../services/api'
+import { formatarHora } from '../../utils/datas'
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const formatoDia = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'long' })
@@ -22,11 +23,6 @@ function dataValida(data, hoje) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data < hoje || data > '9999-12-31') return false
   const dia = new Date(`${data}T12:00:00Z`)
   return !Number.isNaN(dia.getTime()) && dia.toISOString().slice(0, 10) === data
-}
-
-function formatarHora(hora) {
-  if (/^\d{2}:\d{2}:00(?:\.0+)?$/.test(hora)) return hora.slice(0, 5)
-  return hora.includes('.') ? hora.replace(/0+$/, '').replace(/\.$/, '') : hora
 }
 
 function mensagemErro(erro, consulta = false) {

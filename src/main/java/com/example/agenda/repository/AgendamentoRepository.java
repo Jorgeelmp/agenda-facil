@@ -43,7 +43,6 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
             @Param("inicio") LocalDateTime inicio,
             @Param("fim") LocalDateTime fim);
 
-    // Evita que duas alterações simultâneas do mesmo agendamento se sobrescrevam.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select ag from Agendamento ag where ag.id = :id")
     Optional<Agendamento> findByIdParaAlterar(@Param("id") UUID id);
