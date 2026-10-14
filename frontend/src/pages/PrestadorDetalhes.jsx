@@ -4,6 +4,7 @@ import { Alert } from '../components/Alert'
 import PerfilPrestador from '../components/prestador/PerfilPrestador'
 import HorariosPrestador from '../components/prestador/HorariosPrestador'
 import DisponibilidadePrestador from '../components/prestador/DisponibilidadePrestador'
+import AvaliacoesPrestador from '../components/avaliacao/AvaliacoesPrestador'
 import { useAuth } from '../context/AuthContext'
 import { prestadorApi } from '../services/api'
 import { useApiResource } from '../hooks/useApiResource'
@@ -42,6 +43,7 @@ export default function PrestadorDetalhes() {
             <HorariosPrestador prestadorId={perfil.id} canManage={canManage} onChange={refreshAvailability} />
           </div>
           <DisponibilidadePrestador prestadorId={perfil.id} ativo={perfil.ativo} revision={revision} />
+          <AvaliacoesPrestador prestadorId={perfil.id} />
         </>
       )}
     </>

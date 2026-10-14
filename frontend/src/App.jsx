@@ -8,6 +8,7 @@ import Prestadores from './pages/Prestadores'
 import MeuNegocio from './pages/MeuNegocio'
 import PrestadorDetalhes from './pages/PrestadorDetalhes'
 import Agendamentos from './pages/Agendamentos'
+import Avaliacoes from './pages/Avaliacoes'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="meu-negocio" element={<MeuNegocio />} />
             <Route path="prestadores/:prestadorId" element={<PrestadorDetalhes />} />
             <Route path="agendamentos" element={<Agendamentos />} />
+            <Route path="avaliacoes" element={<Avaliacoes />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

@@ -135,6 +135,11 @@ async function preparar(page, options = {}) {
       return reply(204)
     }
     if (method === 'GET' && path === `${PERFIL_PATH}/servicos`) return reply(200, state.servicos)
+    // Painel de avaliações exibido na página do prestador
+    if (method === 'GET' && path === `${PERFIL_PATH}/avaliacoes`) return reply(200, [])
+    if (method === 'GET' && path === `${PERFIL_PATH}/avaliacoes/media`) {
+      return reply(200, { prestadorId: PRESTADOR_ID, notaMedia: null, totalAvaliacoes: 0 })
+    }
     if (method === 'GET' && path === `${PERFIL_PATH}/disponibilidade`) {
       const servico = state.servicos.find((item) => item.id === url.searchParams.get('servicoId'))
       return reply(200, {

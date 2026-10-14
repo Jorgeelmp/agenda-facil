@@ -101,6 +101,17 @@ export const agendamentoApi = {
   excluir: (id) => request(`/agendamentos/${id}`, { method: 'DELETE' }),
 }
 
+export const avaliacaoApi = {
+  // Cliente: as que fez | Prestador: as que recebeu | Admin: todas
+  listar: (options) => request('/avaliacoes', options),
+  buscar: (id, options) => request(`/avaliacoes/${id}`, options),
+  criar: (body) => request('/avaliacoes', { method: 'POST', body }),
+  atualizar: (id, body) => request(`/avaliacoes/${id}`, { method: 'PUT', body }),
+  excluir: (id) => request(`/avaliacoes/${id}`, { method: 'DELETE' }),
+  doPrestador: (prestadorId, options) => request(`/prestadores/${prestadorId}/avaliacoes`, options),
+  media: (prestadorId, options) => request(`/prestadores/${prestadorId}/avaliacoes/media`, options),
+}
+
 export function decodeToken(token) {
   try {
     const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')

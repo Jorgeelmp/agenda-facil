@@ -24,7 +24,7 @@ public interface AvaliacaoRepository extends JpaRepository<Avaliacao, UUID> {
 
     @EntityGraph(attributePaths = {"agendamento", "agendamento.cliente", "agendamento.servico",
             "agendamento.servico.prestador"})
-    List<Avaliacao> findByAgendamentoClienteIdOrderByDataAvalaliacaoDesc(UUID clienteId);
+    List<Avaliacao> findByAgendamentoClienteIdOrderByDataAvaliacaoDesc(UUID clienteId);
 
     @EntityGraph(attributePaths = {"agendamento", "agendamento.cliente", "agendamento.servico",
             "agendamento.servico.prestador"})

@@ -85,6 +85,11 @@ async function preparar(page, options = {}) {
     if (method === 'GET' && path === PERFIL_PATH) return reply(200, PERFIL)
     if (method === 'GET' && path === `${PERFIL_PATH}/horarios`) return reply(200, [])
     if (method === 'GET' && path === `${PERFIL_PATH}/servicos`) return reply(200, [SERVICO])
+    // Painel de avaliações exibido na página do prestador
+    if (method === 'GET' && path === `${PERFIL_PATH}/avaliacoes`) return reply(200, [])
+    if (method === 'GET' && path === `${PERFIL_PATH}/avaliacoes/media`) {
+      return reply(200, { prestadorId: PRESTADOR_ID, notaMedia: null, totalAvaliacoes: 0 })
+    }
     if (method === 'GET' && path === `${PERFIL_PATH}/disponibilidade`) {
       return reply(200, {
         prestadorId: PRESTADOR_ID, servicoId: SERVICO_ID, data: url.searchParams.get('data'),

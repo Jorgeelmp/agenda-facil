@@ -233,7 +233,7 @@ class AvaliacaoServiceTest {
  
     @Test
     void clienteListaSomenteAsSuas() {
-        when(avaliacaoRepository.findByAgendamentoClienteIdOrderByDataAvalaliacaoDesc(cliente.getId()))
+        when(avaliacaoRepository.findByAgendamentoClienteIdOrderByDataAvaliacaoDesc(cliente.getId()))
                 .thenReturn(List.of(avaliacao(5)));
  
         assertThat(avaliacaoService.listar(token(cliente))).singleElement()

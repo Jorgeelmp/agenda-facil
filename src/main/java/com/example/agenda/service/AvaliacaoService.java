@@ -73,7 +73,7 @@ public class AvaliacaoService {
     public List<AvaliacaoResponse> listar(JWTUserData userData) {
         List<Avaliacao> avaliacoes = switch (TipoUsuario.valueOf(userData.tipo())) {
             case ADMIN -> avaliacaoRepository.findAllByOrderByDataAvaliacaoDesc();
-            case CLIENTE -> avaliacaoRepository.findByAgendamentoClienteIdOrderByDataAvalaliacaoDesc(userData.userId());
+            case CLIENTE -> avaliacaoRepository.findByAgendamentoClienteIdOrderByDataAvaliacaoDesc(userData.userId());
             case PRESTADOR -> prestadorRepository.findByUsuarioId(userData.userId()).map(prestador -> 
                 avaliacaoRepository.findByAgendamentoServicoPrestadorIdOrderByDataAvaliacaoDesc(prestador.getId())).orElse(List.of());
         };
@@ -109,7 +109,7 @@ public class AvaliacaoService {
     public AvaliacaoResponse atualizar(UUID id, AvaliacaoUpdateRequest request, JWTUserData userData) {
         Avaliacao avaliacao = buscaDetalhada(id);
         if (!isClienteDoAgendamento(avaliacao.getAgendamento(), userData)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente o autor pode editar esta avalição");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente o autor pode editar esta avaliação");
         }
 
         avaliacao.setNota(request.nota());

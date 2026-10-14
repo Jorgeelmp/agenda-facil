@@ -23,7 +23,6 @@ import com.example.agenda.dto.response.NotaMediaResponse;
 import com.example.agenda.service.AvaliacaoService;
 
 import jakarta.validation.Valid;
-import tools.jackson.databind.annotation.JsonAppend.Attr;
 
 @RestController 
 public class AvaliacaoController {
@@ -76,7 +75,7 @@ public class AvaliacaoController {
         return ResponseEntity.ok(avaliacaoService.listarPorPrestador(prestadorId));
     }
 
-    @GetMapping("/prestador/{prestadorId}/avaliacoes/media")
+    @GetMapping("/prestadores/{prestadorId}/avaliacoes/media")
     public ResponseEntity<NotaMediaResponse> notaMedia(@PathVariable UUID prestadorId) {
         return ResponseEntity.ok(avaliacaoService.notaMedia(prestadorId));
     }
