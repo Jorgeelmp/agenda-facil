@@ -68,6 +68,11 @@ export const authApi = {
   register: (dados) => request('/auth/register', { method: 'POST', body: dados, auth: false }),
 }
 
+export const usuarioApi = {
+  listar: (options) => request('/usuarios', options),
+  resumo: (options) => request('/usuarios/resumo', options),
+}
+
 export const prestadorApi = {
   listar: (ativo, options) => request(`/prestadores${ativo === undefined ? '' : `?ativo=${ativo}`}`, options),
   buscar: (id, options) => request(`/prestadores/${id}`, options),
@@ -88,6 +93,26 @@ export const horarioApi = {
   criar: (prestadorId, body) => request(`/prestadores/${prestadorId}/horarios`, { method: 'POST', body }),
   atualizar: (prestadorId, id, body) => request(`/prestadores/${prestadorId}/horarios/${id}`, { method: 'PUT', body }),
   excluir: (prestadorId, id) => request(`/prestadores/${prestadorId}/horarios/${id}`, { method: 'DELETE' }),
+}
+
+export const categoriaApi = {
+  listar: (options) => request('/categorias', options),
+  buscar: (id, options) => request(`/categorias/${id}`, options),
+  criar: (body) => request('/categorias', { method: 'POST', body }),
+  atualizar: (id, body) => request(`/categorias/${id}`, { method: 'PUT', body }),
+  excluir: (id) => request(`/categorias/${id}`, { method: 'DELETE' }),
+}
+
+export const servicoApi = {
+  listar: (filtros = {}, options) => {
+    const query = new URLSearchParams(Object.entries(filtros).filter(([, value]) => value !== '' && value != null))
+    return request(`/servicos${query.size ? `?${query}` : ''}`, options)
+  },
+  gerenciar: (prestadorId, options) => request(`/prestadores/${prestadorId}/servicos/gestao`, options),
+  buscar: (prestadorId, id, options) => request(`/prestadores/${prestadorId}/servicos/${id}`, options),
+  criar: (prestadorId, body) => request(`/prestadores/${prestadorId}/servicos`, { method: 'POST', body }),
+  atualizar: (prestadorId, id, body) => request(`/prestadores/${prestadorId}/servicos/${id}`, { method: 'PUT', body }),
+  excluir: (prestadorId, id) => request(`/prestadores/${prestadorId}/servicos/${id}`, { method: 'DELETE' }),
 }
 
 export const agendamentoApi = {

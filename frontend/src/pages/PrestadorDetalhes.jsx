@@ -23,12 +23,12 @@ export default function PrestadorDetalhes() {
 
   return (
     <>
-      <Link className="back-link" to="/dashboard">← Voltar aos prestadores</Link>
+      <Link className="back-link" to={payload?.tipo === 'ADMIN' ? '/dashboard/prestadores' : '/dashboard'}>← Voltar aos prestadores</Link>
       {loading ? <p className="loading-state" role="status">Carregando negócio…</p> : error ? (
         <div className="panel"><Alert message={error.status === 404 ? 'Este negócio não foi encontrado.' : error.message} errors={error.errors} /><button className="btn btn--ghost" onClick={retry}>Tentar novamente</button></div>
       ) : perfil && (
         <>
-          <div className="page-heading"><h1>{perfil.nomeNegocio}</h1><p>{canManage ? 'Gerencie o negócio e confira a disponibilidade.' : 'Conheça o negócio e os horários de atendimento.'}</p></div>
+          <div className="page-heading page-heading--actions"><div><h1>{perfil.nomeNegocio}</h1><p>{canManage ? 'Gerencie o negócio e confira a disponibilidade.' : 'Conheça o negócio e os horários de atendimento.'}</p></div>{canManage && <Link className="btn btn--ghost" to={`/dashboard/prestadores/${perfil.id}/servicos`}>Gerenciar serviços</Link>}</div>
           <div className="business-grid">
             {canManage ? <PerfilPrestador key={perfil.id} perfil={perfil} onSaved={(value) => { update(value); refreshAvailability() }} onDeleted={() => navigate('/dashboard', { replace: true })} /> : (
               <section className="panel" aria-labelledby="negocio-title">

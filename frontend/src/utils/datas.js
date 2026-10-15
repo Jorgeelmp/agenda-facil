@@ -6,6 +6,10 @@ export function formatarHora(hora) {
   return hora.includes('.') ? hora.replace(/0+$/, '').replace(/\.$/, '') : hora
 }
 
+export function formatarHoraMinutos(hora) {
+  return typeof hora === 'string' && /^\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?$/.test(hora) ? hora.slice(0, 5) : ''
+}
+
 export function separarDataHora(dataHora) {
   const partes = DATA_HORA.exec(dataHora ?? '')
   if (!partes) return null

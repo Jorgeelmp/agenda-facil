@@ -19,7 +19,11 @@ export default function Dashboard() {
       </header>
 
       <nav className="dash__nav" aria-label="Navegação principal">
-        <NavLink to="/dashboard" end>Prestadores</NavLink>
+        {payload?.tipo === 'ADMIN' && <NavLink to="/dashboard" end>Visão geral</NavLink>}
+        <NavLink to={payload?.tipo === 'ADMIN' ? '/dashboard/prestadores' : '/dashboard'} end>Prestadores</NavLink>
+        {payload?.tipo === 'ADMIN' && <NavLink to="/dashboard/usuarios">Usuários</NavLink>}
+        <NavLink to="/dashboard/servicos">Serviços</NavLink>
+        {payload?.tipo === 'ADMIN' && <NavLink to="/dashboard/categorias">Categorias</NavLink>}
         <NavLink to="/dashboard/agendamentos">{payload?.tipo === 'CLIENTE' ? 'Meus agendamentos' : 'Agendamentos'}</NavLink>
         <NavLink to="/dashboard/avaliacoes">{payload?.tipo === 'CLIENTE' ? 'Minhas avaliações' : payload?.tipo === 'PRESTADOR' ? 'Avaliações recebidas' : 'Avaliações'}</NavLink>
         {payload?.tipo === 'PRESTADOR' && <NavLink to="/dashboard/meu-negocio">Meu negócio</NavLink>}

@@ -5,7 +5,7 @@ import { Field } from '../Field'
 import { useAuth } from '../../context/AuthContext'
 import { useApiResource } from '../../hooks/useApiResource'
 import { agendamentoApi, prestadorApi } from '../../services/api'
-import { formatarHora } from '../../utils/datas'
+import { formatarHoraMinutos as formatarHora } from '../../utils/datas'
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const formatoDia = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'long' })

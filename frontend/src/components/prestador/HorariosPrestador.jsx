@@ -3,6 +3,7 @@ import { Field } from '../Field'
 import { Alert } from '../Alert'
 import { horarioApi } from '../../services/api'
 import { useApiResource } from '../../hooks/useApiResource'
+import { formatarHoraMinutos } from '../../utils/datas'
 
 const DIAS = [
   { value: 'SEG', label: 'Segunda-feira' },
@@ -18,12 +19,12 @@ function novoFormulario(diaSemana = '') {
   return { diaSemana, horaInicio: '', horaFim: '', comIntervalo: false, intervaloInicio: '', intervaloFim: '' }
 }
 
-function horaEmMilissegundos(value) {
-  const partes = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(value)
+function horaEmMinutos(value) {
+  const partes = /^(\d{2}):(\d{2})$/.exec(value)
   if (!partes) return null
-  const [, horas, minutos, segundos = '0', fracao = ''] = partes
-  if (Number(horas) > 23 || Number(minutos) > 59 || Number(segundos) > 59) return null
-  return ((Number(horas) * 60 + Number(minutos)) * 60 + Number(segundos)) * 1000 + Number(fracao.padEnd(3, '0'))
+  const [, horas, minutos] = partes
+  if (Number(horas) > 23 || Number(minutos) > 59) return null
+  return Number(horas) * 60 + Number(minutos)
 }
 
 function validarFormulario(form, horarios, editandoId) {
@@ -32,14 +33,14 @@ function validarFormulario(form, horarios, editandoId) {
   if (horarios.some((horario) => horario.diaSemana === form.diaSemana && horario.id !== editandoId)) {
     errors.push('Este dia já possui um horário de funcionamento. Edite o horário existente.')
   }
-  const inicio = horaEmMilissegundos(form.horaInicio)
-  const fim = horaEmMilissegundos(form.horaFim)
+  const inicio = horaEmMinutos(form.horaInicio)
+  const fim = horaEmMinutos(form.horaFim)
   if (inicio === null || fim === null) errors.push('Informe os horários de início e fim do expediente.')
   else if (inicio >= fim) errors.push('O início do expediente deve ser anterior ao fim, no mesmo dia.')
 
   if (form.comIntervalo) {
-    const intervaloInicio = horaEmMilissegundos(form.intervaloInicio)
-    const intervaloFim = horaEmMilissegundos(form.intervaloFim)
+    const intervaloInicio = horaEmMinutos(form.intervaloInicio)
+    const intervaloFim = horaEmMinutos(form.intervaloFim)
     if (intervaloInicio === null || intervaloFim === null) errors.push('Informe o início e o fim do intervalo.')
     else if (intervaloInicio >= intervaloFim) errors.push('O início do intervalo deve ser anterior ao fim.')
     else if ((inicio !== null && intervaloInicio < inicio) || (fim !== null && intervaloFim > fim)) {
@@ -54,8 +55,7 @@ function nomeDia(diaSemana) {
 }
 
 function exibirHora(hora) {
-  if (!hora) return '—'
-  return /^\d{2}:\d{2}:00(?:\.0+)?$/.test(hora) ? hora.slice(0, 5) : hora
+  return formatarHoraMinutos(hora) || '—'
 }
 
 function erroDaApi(error, message) {
@@ -108,11 +108,11 @@ function HorariosDoPrestador({ prestadorId, canManage, onChange }) {
     setEditandoId(horario?.id ?? null)
     setForm(horario ? {
       diaSemana: horario.diaSemana,
-      horaInicio: horario.horaInicio,
-      horaFim: horario.horaFim,
+      horaInicio: formatarHoraMinutos(horario.horaInicio),
+      horaFim: formatarHoraMinutos(horario.horaFim),
       comIntervalo: Boolean(horario.intervaloInicio || horario.intervaloFim),
-      intervaloInicio: horario.intervaloInicio ?? '',
-      intervaloFim: horario.intervaloFim ?? '',
+      intervaloInicio: formatarHoraMinutos(horario.intervaloInicio),
+      intervaloFim: formatarHoraMinutos(horario.intervaloFim),
     } : novoFormulario(DIAS.find((dia) => !horariosAtuais.some((item) => item.diaSemana === dia.value))?.value))
     setFormAberto(true)
   }
@@ -263,8 +263,8 @@ function HorariosDoPrestador({ prestadorId, canManage, onChange }) {
                   </div>
                   <span className="field__help">Cada dia pode ter um expediente. Dias cadastrados ficam indisponíveis nesta lista.</span>
                 </div>
-                <Field label="Início do expediente" name="horaInicio" type="time" step="0.001" value={form.horaInicio} onChange={atualizarCampo} disabled={busy} required />
-                <Field label="Fim do expediente" name="horaFim" type="time" step="0.001" value={form.horaFim} onChange={atualizarCampo} disabled={busy} required />
+                <Field label="Início do expediente" name="horaInicio" type="time" step="60" value={form.horaInicio} onChange={atualizarCampo} disabled={busy} required />
+                <Field label="Fim do expediente" name="horaFim" type="time" step="60" value={form.horaFim} onChange={atualizarCampo} disabled={busy} required />
               </div>
               <div className="field">
                 <label className="field__checkbox" htmlFor={intervaloId}>
@@ -274,8 +274,8 @@ function HorariosDoPrestador({ prestadorId, canManage, onChange }) {
               </div>
               {form.comIntervalo && (
                 <div className="form-grid">
-                  <Field label="Início do intervalo" name="intervaloInicio" type="time" step="0.001" value={form.intervaloInicio} onChange={atualizarCampo} disabled={busy} required />
-                  <Field label="Fim do intervalo" name="intervaloFim" type="time" step="0.001" value={form.intervaloFim} onChange={atualizarCampo} disabled={busy} required />
+                  <Field label="Início do intervalo" name="intervaloInicio" type="time" step="60" value={form.intervaloInicio} onChange={atualizarCampo} disabled={busy} required />
+                  <Field label="Fim do intervalo" name="intervaloFim" type="time" step="60" value={form.intervaloFim} onChange={atualizarCampo} disabled={busy} required />
                 </div>
               )}
               <div className="form-actions">

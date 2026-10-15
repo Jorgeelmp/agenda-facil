@@ -392,7 +392,7 @@ test('horário inválido retornado pela API apresenta erro e permite tentar nova
 
 test('administrador filtra inativos e gerencia o perfil de outro usuário', async ({ page }) => {
   const state = await preparar(page, { tipo: 'ADMIN', perfil: { usuarioId: OUTRO_USUARIO_ID, ativo: false } })
-  await page.goto('/dashboard')
+  await page.goto('/dashboard/prestadores')
   await expect(page.getByRole('heading', { name: 'Nenhum prestador disponível' })).toBeVisible()
   await page.getByLabel('Situação', { exact: true }).selectOption('inativos')
   await page.getByRole('link', { name: `Ver ${PERFIL.nomeNegocio}`, exact: true }).click()
@@ -405,6 +405,30 @@ test('administrador filtra inativos e gerencia o perfil de outro usuário', asyn
   await expect(page.getByRole('button', { name: 'Reativar negócio' })).toBeEnabled()
   expect(state.perfil.usuarioId).toBe(OUTRO_USUARIO_ID)
   expect(state.requests.some((request) => request.path === '/prestadores' && request.query.ativo === 'false')).toBe(true)
+})
+
+test('expediente exibe e edita horas e minutos sem milésimos', async ({ page }) => {
+  await preparar(page, { horarios: [{ ...HORARIO, horaInicio: '09:00:30.123', horaFim: '18:00:30.123', intervaloInicio: '12:00:30.123', intervaloFim: '13:00:30.123' }] })
+  await page.goto('/dashboard/meu-negocio')
+  const tabela = page.getByRole('table', { name: 'Expediente por dia da semana' })
+  await expect(tabela).toContainText('09:00 às 18:00')
+  await expect(tabela).toContainText('12:00 às 13:00')
+  await expect(tabela).not.toContainText('.123')
+  await page.getByRole('button', { name: 'Editar horário de Segunda-feira' }).click()
+  await expect(page.getByLabel('Início do expediente', { exact: true })).toHaveValue('09:00')
+  await expect(page.getByLabel('Início do expediente', { exact: true })).toHaveAttribute('step', '60')
+  await expect(page.getByLabel('Fim do intervalo', { exact: true })).toHaveValue('13:00')
+  const sent = esperarRequisicao(page, 'PUT', `${PERFIL_PATH}/horarios/${HORARIO_ID}`)
+  await page.getByRole('button', { name: 'Salvar horário', exact: true }).click()
+  expect((await sent).postDataJSON()).toEqual({ diaSemana: 'SEG', horaInicio: '09:00', horaFim: '18:00', intervaloInicio: '12:00', intervaloFim: '13:00' })
+})
+
+test('disponibilidade na tela de prestador não exibe milésimos', async ({ page }) => {
+  await preparar(page, { tipo: 'CLIENTE', horariosLivres: ['09:00:30.123', '10:00:30.456'] })
+  await page.goto(DETALHES_PATH)
+  await consultar(page)
+  await expect(page.getByRole('button', { name: '09:00', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '10:00', exact: true })).toBeVisible()
 })
 
 test('resposta 401 encerra a sessão e remove o token', async ({ page }) => {

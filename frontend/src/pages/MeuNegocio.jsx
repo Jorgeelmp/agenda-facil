@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { Alert } from '../components/Alert'
 import PerfilPrestador from '../components/prestador/PerfilPrestador'
 import HorariosPrestador from '../components/prestador/HorariosPrestador'
@@ -30,9 +30,12 @@ export default function MeuNegocio() {
 
   return (
     <>
-      <div className="page-heading">
+      <div className="page-heading page-heading--actions">
+        <div>
         <h1>Meu negócio</h1>
         <p>Gerencie seu perfil e os dias em que você atende.</p>
+        </div>
+        {perfil && <Link className="btn btn--ghost" to={`/dashboard/prestadores/${perfil.id}/servicos`}>Gerenciar serviços</Link>}
       </div>
       {notification && <Alert type="success" message={notification} />}
       {loading ? <p className="loading-state" role="status">Carregando seu negócio…</p> : error ? (
