@@ -59,3 +59,25 @@ com busca por nome/email e filtro de perfil. `GET /usuarios` e
 
 Os horários de expediente, intervalo e disponibilidade da tela de prestador são
 exibidos em `HH:mm`. O formulário grava horários com precisão de minutos.
+
+
+## Documentação da API (Swagger)
+
+Com o backend rodando, acesse `http://localhost:8080/swagger-ui.html`. Para testar
+rotas protegidas, faça `POST /auth/login`, copie o `token` e clique em **Authorize**.
+
+## Dados de demonstração
+
+Na primeira inicialização, `DataSeeder` popula o banco com categorias, prestadores,
+horários, serviços, clientes, agendamentos e avaliações. Ele roda uma única vez e
+pode ser desligado com `SEED_ENABLED=false`. Todas as contas usam a senha `Senha@123`:
+
+- Clientes: `cliente1@seed.agendafacil.com` até `cliente80@seed.agendafacil.com`
+- Prestadores: `prestador1@seed.agendafacil.com` até `prestador22@seed.agendafacil.com`
+
+## Contas de usuário
+
+- `GET /usuarios/me` e `PUT /usuarios/me`: qualquer usuário consulta e edita o próprio
+  nome, telefone e senha (a troca de senha exige a senha atual). A tela é **Meus dados**.
+- `DELETE /usuarios/{id}`: exclusivo de ADMIN. Não é possível excluir a própria conta,
+  nem contas com negócio cadastrado ou com agendamentos (o histórico é preservado).

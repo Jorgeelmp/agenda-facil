@@ -32,6 +32,12 @@ export function AuthProvider({ children }) {
     setToken(novoToken)
   }, [])
 
+  // Após editar a conta o backend devolve um token novo (o nome do usuário vai dentro dele).
+  const atualizarSessao = useCallback((novoToken) => {
+    tokenStorage.set(novoToken)
+    setToken(novoToken)
+  }, [])
+
   const value = useMemo(() => {
     const payload = token ? decodeToken(token) : null
     return {
@@ -40,9 +46,10 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(token),
       login,
       logout,
+      atualizarSessao,
       register: authApi.register,
     }
-  }, [token, login, logout])
+  }, [token, login, logout, atualizarSessao])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -1,15 +1,17 @@
 import { useCallback } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { Alert } from '../components/Alert'
+import { ErrorState, Icon, Loading, PageHeader } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useApiResource } from '../hooks/useApiResource'
 import { usuarioApi } from '../services/api'
 
 const acessos = [
-  { title: 'Usuários', text: 'Consulte todas as contas, seus contatos e perfis de acesso.', to: '/dashboard/usuarios' },
-  { title: 'Categorias', text: 'Organize as categorias utilizadas no catálogo de serviços.', to: '/dashboard/categorias' },
-  { title: 'Prestadores', text: 'Acompanhe os negócios e gerencie seus perfis e serviços.', to: '/dashboard/prestadores' },
-  { title: 'Serviços', text: 'Explore o catálogo por nome, categoria e faixa de preço.', to: '/dashboard/servicos' },
+  { title: 'Usuários', text: 'Consulte todas as contas, seus contatos e perfis de acesso.', to: '/dashboard/usuarios', icon: 'users' },
+  { title: 'Categorias', text: 'Organize as categorias utilizadas no catálogo de serviços.', to: '/dashboard/categorias', icon: 'tag' },
+  { title: 'Prestadores', text: 'Acompanhe os negócios e gerencie seus perfis e serviços.', to: '/dashboard/prestadores', icon: 'store' },
+  { title: 'Serviços', text: 'Explore o catálogo por nome, categoria e faixa de preço.', to: '/dashboard/servicos', icon: 'sparkles' },
+  { title: 'Agendamentos', text: 'Veja, remarque, cancele ou exclua agendamentos.', to: '/dashboard/agendamentos', icon: 'calendar' },
+  { title: 'Avaliações', text: 'Modere as avaliações feitas pelos clientes.', to: '/dashboard/avaliacoes', icon: 'star' },
 ]
 
 export default function AdminHome() {
@@ -20,13 +22,26 @@ export default function AdminHome() {
 
   return (
     <>
-      <div className="page-heading"><h1>Painel administrativo</h1><p>Acompanhe as contas e acesse a gestão do AgendaFácil.</p></div>
-      {resource.loading ? <p className="loading-state" role="status">Carregando resumo…</p> : resource.error ? <div className="panel"><Alert message={resource.error.message} /><button className="btn btn--ghost" onClick={resource.retry}>Tentar novamente</button></div> : resource.data && (
-        <dl className="admin-stats">
-          {[['Total de usuários', resource.data.total], ['Clientes', resource.data.clientes], ['Prestadores', resource.data.prestadores], ['Administradores', resource.data.administradores]].map(([label, value]) => <div className="panel" key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+      <PageHeader title="Painel administrativo" description="Acompanhe as contas e acesse a gestão do AgendaFácil." />
+      {resource.loading ? <Loading>Carregando resumo…</Loading> : resource.error ? <div className="card"><ErrorState error={resource.error} onRetry={resource.retry} /></div> : resource.data && (
+        <dl className="stats">
+          {[['Total de usuários', resource.data.total, 'users'], ['Clientes', resource.data.clientes, 'user'], ['Prestadores', resource.data.prestadores, 'store'], ['Administradores', resource.data.administradores, 'shield']].map(([label, value, icon]) => (
+            <div className="stat" key={label}><dt><Icon name={icon} size="sm" />{label}</dt><dd>{value}</dd></div>
+          ))}
         </dl>
       )}
-      <section aria-labelledby="admin-acessos"><h2 className="admin-section-title" id="admin-acessos">Gerenciar o sistema</h2><div className="admin-links">{acessos.map((item) => <Link className="panel admin-link" key={item.to} to={item.to}><h3>{item.title}<span aria-hidden="true">→</span></h3><p>{item.text}</p></Link>)}</div></section>
+      <section className="stack" aria-labelledby="admin-acessos">
+        <h2 id="admin-acessos">Gerenciar o sistema</h2>
+        <div className="grid-cards">
+          {acessos.map((item) => (
+            <Link className="shortcut" key={item.to} to={item.to}>
+              <span className="shortcut__icon"><Icon name={item.icon} /></span>
+              <div><h3>{item.title}</h3><p>{item.text}</p></div>
+              <Icon name="chevron-right" />
+            </Link>
+          ))}
+        </div>
+      </section>
     </>
   )
 }

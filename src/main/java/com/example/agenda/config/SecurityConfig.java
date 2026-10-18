@@ -52,6 +52,8 @@ public class SecurityConfig {
                             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                             .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                             .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
+                            // Documentação Swagger/OpenAPI (RNF08)
+                            .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                             .anyRequest().authenticated())
                         .exceptionHandling(ex -> ex
                                 .authenticationEntryPoint((request, response, erro) -> escreverErro(response,

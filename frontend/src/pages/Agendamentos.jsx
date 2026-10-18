@@ -1,43 +1,17 @@
-import { useCallback, useEffect, useId, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Alert } from '../components/Alert'
-import { Field } from '../components/Field'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Remarcacao } from '../components/agendamento/Remarcacao'
+import { moeda } from '../components/servico/formatos'
+import { ConfirmDialog, EmptyState, ErrorState, Icon, Loading, PageHeader } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { useApiResource } from '../hooks/useApiResource'
-import { agendamentoApi } from '../services/api'
-import { agoraEmSaoPaulo, formatarHora, separarDataHora } from '../utils/datas'
+import { agendamentoApi, avaliacaoApi } from '../services/api'
+import { agoraEmSaoPaulo, dataDe, formatarDataLonga, horaDe, hojeEmSaoPaulo, rotuloDia } from '../utils/datas'
+import { estaAtivo, STATUS } from '../utils/status'
+import { StatusBadge } from '../components/StatusBadge'
 
-const STATUS = {
-  PENDENTE: { label: 'Pendente', badge: 'badge' },
-  CONFIRMADO: { label: 'Confirmado', badge: 'badge badge--active' },
-  CONCLUIDO: { label: 'Concluído', badge: 'badge' },
-  CANCELADO: { label: 'Cancelado', badge: 'badge badge--danger' },
-}
-const formatoData = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
-const formatoDia = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'long' })
-const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-
-function hora(dataHora) {
-  const partes = separarDataHora(dataHora)
-  return partes ? formatarHora(partes.hora) : dataHora
-}
-
-function dia(dataHora) {
-  return separarDataHora(dataHora)?.data ?? ''
-}
-
-function formatarData(dataHora) {
-  const partes = separarDataHora(dataHora)
-  if (!partes) return dataHora
-  if (!/^\d{4}$/.test(partes.ano)) return `${partes.dia}/${partes.mes}/${partes.ano}`
-  return formatoData.format(new Date(`${partes.data}T12:00:00Z`))
-}
-
-function formatarDiaLongo(dataHora) {
-  const partes = separarDataHora(dataHora)
-  if (!partes || !/^\d{4}$/.test(partes.ano)) return formatarData(dataHora)
-  return formatoDia.format(new Date(`${partes.data}T12:00:00Z`))
-}
+const POR_PAGINA = 40
 
 function useAgoraEmSaoPaulo(atualizar) {
   const [agora, setAgora] = useState(agoraEmSaoPaulo)
@@ -49,277 +23,267 @@ function useAgoraEmSaoPaulo(atualizar) {
   return atualizar ? agora : agoraEmSaoPaulo()
 }
 
-function ativo(agendamento) {
-  return agendamento.status === 'PENDENTE' || agendamento.status === 'CONFIRMADO'
+function agrupar(lista) {
+  const grupos = []
+  for (const item of lista) {
+    const dia = dataDe(item.dataHora) || item.dataHora
+    const ultimo = grupos[grupos.length - 1]
+    if (ultimo?.dia === dia) ultimo.itens.push(item)
+    else grupos.push({ dia, itens: [item] })
+  }
+  return grupos
 }
 
+// Agenda (RF07, RF08): próximos horários e histórico, com as ações que cada perfil pode fazer.
 export default function Agendamentos() {
   const { payload } = useAuth()
+  const notify = useToast()
   const tipo = payload?.tipo
-  const [filtro, setFiltro] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [erro, setErro] = useState(null)
-  const [sucesso, setSucesso] = useState('')
-  const [confirmando, setConfirmando] = useState(null)
-  const [remarcando, setRemarcando] = useState(null)
-
-  const carregar = useCallback((options) => agendamentoApi.listar(filtro, options), [filtro])
-  const { data, loading, error, retry, update } = useApiResource(carregar, `agendamentos:${filtro}`)
-  const agendamentos = data ?? []
-
   const isCliente = tipo === 'CLIENTE'
   const isPrestador = tipo === 'PRESTADOR'
   const isAdmin = tipo === 'ADMIN'
-  const aguardandoHorario = (isPrestador || isAdmin)
-    && agendamentos.some((item) => item.status === 'CONFIRMADO' && item.dataHora > agoraEmSaoPaulo())
-  const agora = useAgoraEmSaoPaulo(aguardandoHorario)
+  const gerencia = isPrestador || isAdmin
 
-  function substituir(atualizado) {
-    update(agendamentos
-      .map((item) => item.id === atualizado.id ? atualizado : item)
-      .filter((item) => !filtro || item.status === filtro))
+  const [params, setParams] = useSearchParams()
+  const aba = ['abertos', 'historico', 'todos'].includes(params.get('aba')) ? params.get('aba') : 'abertos'
+  const filtro = STATUS[params.get('status')] ? params.get('status') : ''
+  const [busca, setBusca] = useState('')
+  const [limite, setLimite] = useState(POR_PAGINA)
+  const [busy, setBusy] = useState(false)
+  const [confirmando, setConfirmando] = useState(null)
+  const [erroConfirmacao, setErroConfirmacao] = useState(null)
+  const [remarcando, setRemarcando] = useState(null)
+
+  const carregar = useCallback((options) => agendamentoApi.listar('', options), [])
+  const { data, loading, error, retry, update } = useApiResource(carregar, 'agendamentos')
+  const agendamentos = useMemo(() => data ?? [], [data])
+
+  // Cliente: descobre quais atendimentos concluídos ainda não foram avaliados.
+  const carregarAvaliacoes = useCallback((options) => avaliacaoApi.listar(options), [])
+  const avaliacoes = useApiResource(carregarAvaliacoes, 'avaliacoes', { enabled: isCliente })
+  const avaliados = useMemo(() => new Set((avaliacoes.data ?? []).map((item) => item.agendamentoId)), [avaliacoes.data])
+
+  const aguardandoHorario = gerencia && agendamentos.some((item) => item.status === 'CONFIRMADO' && item.dataHora > agoraEmSaoPaulo())
+  const agora = useAgoraEmSaoPaulo(aguardandoHorario)
+  const hoje = hojeEmSaoPaulo()
+
+  // Em aberto = pendentes e confirmados (inclusive os que já passaram e ainda precisam ser concluídos).
+  const daAba = agendamentos.filter((item) => aba === 'todos' || (aba === 'abertos' ? estaAtivo(item) : !estaAtivo(item)))
+  const termo = busca.trim().toLocaleLowerCase('pt-BR')
+  const buscados = termo
+    ? daAba.filter((item) => `${item.servicoNome} ${item.clienteNome} ${item.prestadorNome}`.toLocaleLowerCase('pt-BR').includes(termo))
+    : daAba
+  const contagem = Object.fromEntries(Object.keys(STATUS).map((status) => [status, buscados.filter((item) => item.status === status).length]))
+  const filtrados = buscados
+    .filter((item) => !filtro || item.status === filtro)
+    .sort((a, b) => aba === 'abertos' ? a.dataHora.localeCompare(b.dataHora) : b.dataHora.localeCompare(a.dataHora))
+  const visiveis = filtrados.slice(0, limite)
+
+  const pendentes = agendamentos.filter((item) => item.status === 'PENDENTE' && item.dataHora >= agora).length
+  const paraConcluir = agendamentos.filter((item) => item.status === 'CONFIRMADO' && item.dataHora <= agora).length
+
+  function navegar(novos) {
+    const proximos = { aba, status: filtro, ...novos }
+    setParams(Object.fromEntries(Object.entries(proximos).filter(([chave, valor]) => valor && !(chave === 'aba' && valor === 'abertos'))), { replace: true })
+    setLimite(POR_PAGINA)
   }
 
-  async function executar(acao, mensagem) {
+  function substituir(atualizado) {
+    update(agendamentos.map((item) => item.id === atualizado.id ? atualizado : item))
+  }
+
+  async function executar(acao, mensagem, { emDialogo = false } = {}) {
     if (busy) return
     setBusy(true)
-    setErro(null)
-    setSucesso('')
+    setErroConfirmacao(null)
     try {
       await acao()
       setConfirmando(null)
-      setSucesso(mensagem)
+      notify(mensagem)
     } catch (err) {
-      setErro({ message: err.message || 'Não foi possível concluir a operação.', errors: err.errors ?? [] })
+      const erro = { message: err.message || 'Não foi possível concluir a operação.', errors: err.errors ?? [] }
+      if (emDialogo) setErroConfirmacao(erro)
+      else notify(erro.message, 'error')
       if (err.status === 404 || err.status === 409) retry()
     } finally {
       setBusy(false)
     }
   }
 
-  function alterarStatus(agendamento, status, mensagem) {
-    return executar(async () => substituir(await agendamentoApi.alterarStatus(agendamento.id, status)), mensagem)
+  function alterarStatus(agendamento, status, mensagem, opcoes) {
+    return executar(async () => substituir(await agendamentoApi.alterarStatus(agendamento.id, status)), mensagem, opcoes)
   }
 
   function excluir(agendamento) {
     return executar(async () => {
       await agendamentoApi.excluir(agendamento.id)
       update(agendamentos.filter((item) => item.id !== agendamento.id))
-    }, 'Agendamento excluído.')
+    }, 'Agendamento excluído.', { emDialogo: true })
   }
 
-  function abrirRemarcacao(agendamento) {
-    setErro(null)
-    setSucesso('')
-    setConfirmando(null)
-    setRemarcando(agendamento)
-  }
-
-  const titulo = isCliente ? 'Meus agendamentos' : isPrestador ? 'Agenda do negócio' : 'Agendamentos'
+  const titulo = isCliente ? 'Meus agendamentos' : isPrestador ? 'Agenda' : 'Agendamentos'
   const descricao = isCliente
     ? 'Acompanhe, remarque ou cancele seus horários.'
     : isPrestador
       ? 'Confirme, conclua ou cancele os horários reservados pelos seus clientes.'
       : 'Todos os agendamentos da plataforma.'
 
+  const abas = [['abertos', 'Em aberto'], ['historico', 'Histórico'], ['todos', 'Todos']]
+
   return (
     <>
-      <div className="page-heading page-heading--actions">
-        <div><h1>{titulo}</h1><p>{descricao}</p></div>
-        {isCliente && <Link className="btn btn--ghost" to="/dashboard">Agendar novo horário</Link>}
-      </div>
+      <PageHeader title={titulo} description={descricao}
+        actions={isCliente && <Link className="btn btn--primary" to="/dashboard/servicos"><Icon name="calendar-plus" size="sm" />Agendar novo horário</Link>} />
 
-      <div className="directory-filters">
-        <div className="field">
-          <label className="field__label" htmlFor="filtro-status">Status</label>
-          <select id="filtro-status" value={filtro} onChange={(event) => { setFiltro(event.target.value); setConfirmando(null); setRemarcando(null) }}>
-            <option value="">Todos</option>
-            {Object.entries(STATUS).map(([valor, { label }]) => <option key={valor} value={valor}>{label}</option>)}
-          </select>
+      {gerencia && !loading && !error && (pendentes > 0 || paraConcluir > 0) && (
+        <div className="stats">
+          {pendentes > 0 && (
+            <button type="button" className="stat stat--highlight" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => navegar({ aba: 'abertos', status: 'PENDENTE' })}>
+              <span className="stat__label"><Icon name="clock" size="sm" />Aguardando sua confirmação</span>
+              <span className="stat__value">{pendentes}</span>
+              <span className="stat__hint">Ver pendentes →</span>
+            </button>
+          )}
+          {paraConcluir > 0 && (
+            <button type="button" className="stat" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => navegar({ aba: 'abertos', status: 'CONFIRMADO' })}>
+              <span className="stat__label"><Icon name="check-circle" size="sm" />Atendimentos para concluir</span>
+              <span className="stat__value">{paraConcluir}</span>
+              <span className="stat__hint">Horário já passou →</span>
+            </button>
+          )}
         </div>
-      </div>
+      )}
 
-      {erro && <Alert message={erro.message} errors={erro.errors} />}
-      {sucesso && <Alert type="success" message={sucesso} />}
-
-      {loading ? <p className="loading-state" role="status">Carregando agendamentos…</p> : error ? (
-        <div className="panel"><Alert message={error.message} errors={error.errors} /><button className="btn btn--ghost" onClick={retry}>Tentar novamente</button></div>
-      ) : agendamentos.length === 0 ? (
-        <div className="panel empty-state">
-          <h2>Nenhum agendamento {filtro ? `com status ${STATUS[filtro].label.toLowerCase()}` : 'encontrado'}</h2>
-          <p>{isCliente ? 'Escolha um prestador e um horário livre para fazer seu primeiro agendamento.' : 'Os horários reservados aparecerão aqui.'}</p>
-        </div>
-      ) : (
-        <section className="panel" aria-label={titulo}>
-          <div className="table-wrap">
-            <table className="data-table" aria-label="Lista de agendamentos">
-              <thead>
-                <tr>
-                  <th scope="col">Data e hora</th>
-                  <th scope="col">Serviço</th>
-                  {!isCliente && <th scope="col">Cliente</th>}
-                  {!isPrestador && <th scope="col">Prestador</th>}
-                  <th scope="col">Status</th>
-                  <th scope="col">Observações</th>
-                  <th scope="col">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agendamentos.map((agendamento) => {
-                  const podeConfirmar = (isPrestador || isAdmin) && agendamento.status === 'PENDENTE'
-                  const podeConcluir = (isPrestador || isAdmin) && agendamento.status === 'CONFIRMADO' && agendamento.dataHora <= agora
-                  const podeRemarcar = (isCliente || isAdmin) && ativo(agendamento)
-                  const descricaoItem = `${agendamento.servicoNome} em ${formatarData(agendamento.dataHora)} às ${hora(agendamento.dataHora)}`
-                  return (
-                    <tr key={agendamento.id}>
-                      <th scope="row">
-                        {formatarData(agendamento.dataHora)}
-                        <span className="cell-sub">{hora(agendamento.dataHora)} às {hora(agendamento.dataHoraFim)}</span>
-                      </th>
-                      <td>
-                        {agendamento.servicoNome}
-                        <span className="cell-sub">{agendamento.duracaoMinutos} min · {moeda.format(Number(agendamento.preco))}</span>
-                      </td>
-                      {!isCliente && <td>{agendamento.clienteNome}</td>}
-                      {!isPrestador && <td><Link to={`/dashboard/prestadores/${agendamento.prestadorId}`}>{agendamento.prestadorNome}</Link></td>}
-                      <td><span className={STATUS[agendamento.status]?.badge ?? 'badge'}>{STATUS[agendamento.status]?.label ?? agendamento.status}</span></td>
-                      <td className="cell-wrap">{agendamento.observacoes || '—'}</td>
-                      <td>
-                        <div className="form-actions">
-                          {podeConfirmar && <button className="btn btn--ghost" type="button" disabled={busy} aria-label={`Confirmar ${descricaoItem}`} onClick={() => alterarStatus(agendamento, 'CONFIRMADO', 'Agendamento confirmado.')}>Confirmar</button>}
-                          {podeConcluir && <button className="btn btn--ghost" type="button" disabled={busy} aria-label={`Concluir ${descricaoItem}`} onClick={() => alterarStatus(agendamento, 'CONCLUIDO', 'Agendamento concluído.')}>Concluir</button>}
-                          {podeRemarcar && <button className="btn btn--ghost" type="button" disabled={busy} aria-label={`Remarcar ${descricaoItem}`} onClick={() => abrirRemarcacao(agendamento)}>Remarcar</button>}
-                          {ativo(agendamento) && <button className="btn btn--danger" type="button" disabled={busy} aria-label={`Cancelar ${descricaoItem}`} onClick={() => { setRemarcando(null); setConfirmando({ acao: 'cancelar', agendamento }) }}>Cancelar</button>}
-                          {isAdmin && <button className="btn btn--danger" type="button" disabled={busy} aria-label={`Excluir ${descricaoItem}`} onClick={() => { setRemarcando(null); setConfirmando({ acao: 'excluir', agendamento }) }}>Excluir</button>}
-                          {!podeConfirmar && !podeConcluir && !podeRemarcar && !ativo(agendamento) && !isAdmin && <span className="cell-sub">—</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      <div className="stack">
+        <nav className="tabs" aria-label="Situação dos agendamentos">
+          {abas.map(([valor, rotulo]) => (
+            <button key={valor} type="button" className={`tab${aba === valor ? ' is-active' : ''}`} aria-pressed={aba === valor} onClick={() => navegar({ aba: valor })}>{rotulo}</button>
+          ))}
+        </nav>
+        <div className="toolbar">
+          <div className="chips" role="group" aria-label="Filtrar por status" style={{ flex: '1 1 auto' }}>
+            <button type="button" className={`chip${!filtro ? ' is-active' : ''}`} aria-pressed={!filtro} onClick={() => navegar({ status: '' })}>Todos os status</button>
+            {Object.entries(STATUS).map(([valor, { label }]) => (
+              <button key={valor} type="button" className={`chip${filtro === valor ? ' is-active' : ''}`} aria-pressed={filtro === valor} onClick={() => navegar({ status: filtro === valor ? '' : valor })}>
+                {label}<span className="chip__count">{contagem[valor]}</span>
+              </button>
+            ))}
           </div>
-
-          {confirmando && (
-            <div className="confirm-action" role="alert">
-              <p>{confirmando.acao === 'cancelar'
-                ? `Cancelar ${confirmando.agendamento.servicoNome} em ${formatarData(confirmando.agendamento.dataHora)} às ${hora(confirmando.agendamento.dataHora)}? O horário volta a ficar livre.`
-                : `Excluir definitivamente o agendamento de ${confirmando.agendamento.clienteNome}? Esta ação não pode ser desfeita.`}</p>
-              <div className="form-actions">
-                <button className="btn btn--danger" type="button" disabled={busy} onClick={() => confirmando.acao === 'cancelar'
-                  ? alterarStatus(confirmando.agendamento, 'CANCELADO', 'Agendamento cancelado.')
-                  : excluir(confirmando.agendamento)}>
-                  {busy ? 'Processando…' : confirmando.acao === 'cancelar' ? 'Confirmar cancelamento' : 'Confirmar exclusão'}
-                </button>
-                <button className="btn btn--ghost" type="button" disabled={busy} onClick={() => setConfirmando(null)}>Voltar</button>
+          {!isCliente && (
+            <div className="field" style={{ flex: '0 1 260px' }}>
+              <label className="sr-only" htmlFor="busca-agendamento">Buscar agendamento</label>
+              <div className="field__control search">
+                <Icon name="search" size="sm" />
+                <input id="busca-agendamento" type="search" placeholder={isAdmin ? 'Cliente, serviço ou prestador' : 'Cliente ou serviço'} value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(POR_PAGINA) }} />
               </div>
             </div>
           )}
+        </div>
+      </div>
 
-          {remarcando && (
-            <Remarcacao
-              key={remarcando.id}
-              agendamento={remarcando}
-              onCancel={() => setRemarcando(null)}
-              onSaved={(atualizado) => {
-                substituir(atualizado)
-                setRemarcando(null)
-                setSucesso(atualizado.dataHora === remarcando.dataHora && atualizado.servicoId === remarcando.servicoId
-                  ? 'Agendamento atualizado.'
-                  : 'Agendamento remarcado. Aguarde a nova confirmação do prestador.')
-              }}
-            />
+      {loading ? <Loading>Carregando agendamentos…</Loading> : error ? (
+        <div className="card"><ErrorState error={error} onRetry={retry} /></div>
+      ) : filtrados.length === 0 ? (
+        <div className="card">
+          <EmptyState icon="calendar" title={`Nenhum agendamento ${filtro ? `com status ${STATUS[filtro].label.toLowerCase()}` : aba === 'abertos' ? 'em aberto' : 'encontrado'}`}
+            actions={isCliente && aba === 'abertos' && <Link className="btn btn--primary" to="/dashboard/servicos">Agendar um serviço</Link>}>
+            {isCliente ? 'Escolha um serviço e um horário livre para fazer seu agendamento.' : 'Os horários reservados aparecerão aqui.'}
+          </EmptyState>
+        </div>
+      ) : (
+        <section className="appt-groups" aria-label="Lista de agendamentos">
+          {agrupar(visiveis).map((grupo) => (
+            <div className="appt-group" key={grupo.dia}>
+              <h2 className="appt-group__title">{rotuloDia(grupo.dia, hoje)}{['Hoje', 'Amanhã', 'Ontem'].includes(rotuloDia(grupo.dia, hoje)) && <span>{formatarDataLonga(grupo.dia)}</span>}</h2>
+              <ul className="appt-list">
+                {grupo.itens.map((agendamento) => (
+                  <ItemAgendamento key={agendamento.id} agendamento={agendamento} agora={agora} busy={busy}
+                    isCliente={isCliente} isPrestador={isPrestador} isAdmin={isAdmin} avaliado={avaliados.has(agendamento.id)} avaliacoesProntas={Boolean(avaliacoes.data)}
+                    onStatus={alterarStatus}
+                    onRemarcar={(item) => setRemarcando(item)}
+                    onConfirmar={(acao, item) => { setErroConfirmacao(null); setConfirmando({ acao, agendamento: item }) }} />
+                ))}
+              </ul>
+            </div>
+          ))}
+          {filtrados.length > limite && (
+            <div className="load-more"><button className="btn btn--secondary" type="button" onClick={() => setLimite((v) => v + POR_PAGINA)}>Mostrar mais ({filtrados.length - limite} restantes)</button></div>
           )}
         </section>
+      )}
+
+      {confirmando && (
+        <ConfirmDialog
+          title={confirmando.acao === 'cancelar' ? 'Cancelar agendamento?' : 'Excluir agendamento?'}
+          confirmLabel={confirmando.acao === 'cancelar' ? 'Confirmar cancelamento' : 'Confirmar exclusão'}
+          busy={busy} error={erroConfirmacao}
+          onClose={() => setConfirmando(null)}
+          onConfirm={() => confirmando.acao === 'cancelar'
+            ? alterarStatus(confirmando.agendamento, 'CANCELADO', 'Agendamento cancelado.', { emDialogo: true })
+            : excluir(confirmando.agendamento)}>
+          {confirmando.acao === 'cancelar'
+            ? `Cancelar ${confirmando.agendamento.servicoNome} em ${formatarDataLonga(dataDe(confirmando.agendamento.dataHora))} às ${horaDe(confirmando.agendamento.dataHora)}? O horário volta a ficar livre.`
+            : `Excluir definitivamente o agendamento de ${confirmando.agendamento.clienteNome}? Esta ação não pode ser desfeita.`}
+        </ConfirmDialog>
+      )}
+
+      {remarcando && (
+        <Remarcacao
+          key={remarcando.id}
+          agendamento={remarcando}
+          onCancel={() => setRemarcando(null)}
+          onSaved={(atualizado) => {
+            substituir(atualizado)
+            setRemarcando(null)
+            notify(atualizado.dataHora === remarcando.dataHora && atualizado.servicoId === remarcando.servicoId
+              ? 'Agendamento atualizado.'
+              : 'Agendamento remarcado. Aguarde a nova confirmação do prestador.')
+          }}
+        />
       )}
     </>
   )
 }
 
-function Remarcacao({ agendamento, onCancel, onSaved }) {
-  const observacoesId = useId()
-  const [data, setData] = useState(() => {
-    const atual = dia(agendamento.dataHora)
-    return /^\d{4}-\d{2}-\d{2}$/.test(atual) ? atual : agoraEmSaoPaulo().slice(0, 10)
-  })
-  const [horarioNovo, setHorarioNovo] = useState('')
-  const [observacoes, setObservacoes] = useState(agendamento.observacoes ?? '')
-  const [enviando, setEnviando] = useState(false)
-  const [erro, setErro] = useState(null)
-  const hoje = agoraEmSaoPaulo().slice(0, 10)
-
-  const carregar = useCallback((options) => agendamentoApi.disponibilidade(agendamento.id, data, options), [agendamento.id, data])
-  const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(data) && data >= hoje
-  const disponibilidade = useApiResource(carregar, `${agendamento.id}:${data}`, { enabled: dataValida })
-  const horarios = disponibilidade.data?.horarios ?? []
-
-  async function salvar(event) {
-    event.preventDefault()
-    if (enviando) return
-    setEnviando(true)
-    setErro(null)
-    try {
-      const dataHora = horarioNovo ? `${data}T${horarioNovo}` : agendamento.dataHora
-      onSaved(await agendamentoApi.atualizar(agendamento.id, {
-        servicoId: agendamento.servicoId,
-        dataHora,
-        observacoes: observacoes.trim() || null,
-      }))
-    } catch (err) {
-      setErro({ message: err.message, errors: err.errors ?? [] })
-      if (err.status === 409) {
-        setHorarioNovo('')
-        disponibilidade.retry()
-      }
-      setEnviando(false)
-    }
-  }
+function ItemAgendamento({ agendamento, agora, busy, isCliente, isPrestador, isAdmin, avaliado, avaliacoesProntas, onStatus, onRemarcar, onConfirmar }) {
+  const gerencia = isPrestador || isAdmin
+  const ativo = estaAtivo(agendamento)
+  const passou = agendamento.dataHora <= agora
+  const podeConfirmar = gerencia && agendamento.status === 'PENDENTE'
+  const podeConcluir = gerencia && agendamento.status === 'CONFIRMADO' && passou
+  const podeRemarcar = (isCliente || isAdmin) && ativo
+  const podeAvaliar = isCliente && agendamento.status === 'CONCLUIDO' && avaliacoesProntas && !avaliado
+  const descricaoItem = `${agendamento.servicoNome} em ${formatarDataLonga(dataDe(agendamento.dataHora))} às ${horaDe(agendamento.dataHora)}`
 
   return (
-    <form className="form" onSubmit={salvar} aria-label="Remarcar agendamento">
-      <h3>Remarcar {agendamento.servicoNome}</h3>
-      <p className="panel__description">
-        Atual: {formatarDiaLongo(agendamento.dataHora)} às {hora(agendamento.dataHora)}.
-        Escolha um novo horário ou apenas altere as observações.
-      </p>
-      <div className="form-grid">
-        <Field label="Nova data" hint="Horário de Brasília" type="date" value={data} min={hoje} max="9999-12-31"
-          onChange={(event) => { setData(event.target.value); setHorarioNovo('') }} disabled={enviando} />
+    <li className={`appt${!ativo ? ' appt--past' : ''}`}>
+      <div className="appt__time">
+        <strong>{horaDe(agendamento.dataHora)}</strong>
+        <span>até {horaDe(agendamento.dataHoraFim)}</span>
       </div>
-      {!dataValida ? <p className="empty-state">Escolha uma data a partir de hoje.</p>
-        : disponibilidade.loading ? <p className="empty-state" role="status">Consultando horários livres…</p>
-          : disponibilidade.error ? <Alert message={disponibilidade.error.message} />
-            : horarios.length === 0 ? <p className="empty-state" role="status">Não há horários livres neste dia.</p> : (
-              <ul className="availability-slots" aria-label="Novos horários livres">
-                {horarios.map((item) => {
-                  const atual = `${data}T${item}` === agendamento.dataHora
-                  return (
-                    <li key={item}>
-                      <button type="button" className={`availability-slot availability-slot--button${horarioNovo === item ? ' is-selected' : ''}`}
-                        aria-pressed={horarioNovo === item} disabled={enviando || atual}
-                        onClick={() => setHorarioNovo(horarioNovo === item ? '' : item)}>
-                        <time dateTime={item}>{formatarHora(item)}</time>{atual && ' (atual)'}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-      <div className="field">
-        <label className="field__label" htmlFor={observacoesId}>Observações<span className="field__hint">Opcional</span></label>
-        <div className="field__control">
-          <textarea id={observacoesId} rows={3} maxLength={500} value={observacoes} disabled={enviando}
-            onChange={(event) => setObservacoes(event.target.value)} />
+      <div className="appt__body">
+        <div className="appt__title">
+          <strong>{agendamento.servicoNome}</strong>
+          <StatusBadge status={agendamento.status} />
+          {isCliente && agendamento.status === 'CONCLUIDO' && avaliado && <span className="badge badge--plain"><Icon name="star" size="sm" />Avaliado</span>}
         </div>
+        <div className="appt__meta">
+          {!isCliente && <span><Icon name="user" size="sm" />{agendamento.clienteNome}</span>}
+          {!isPrestador && <span><Icon name="store" size="sm" /><Link to={`/dashboard/prestadores/${agendamento.prestadorId}`}>{agendamento.prestadorNome}</Link></span>}
+          <span><Icon name="clock" size="sm" />{agendamento.duracaoMinutos} min</span>
+          <span><Icon name="wallet" size="sm" />{moeda.format(Number(agendamento.preco))}</span>
+        </div>
+        {agendamento.observacoes && <p className="appt__note">“{agendamento.observacoes}”</p>}
+        {gerencia && agendamento.status === 'CONFIRMADO' && !passou && <p className="subtle">Concluir fica disponível a partir do horário marcado.</p>}
       </div>
-      {erro && <Alert message={erro.message} errors={erro.errors} />}
-      <div className="form-actions">
-        <button className="btn btn--primary" type="submit" disabled={enviando}>
-          {enviando ? 'Salvando…' : horarioNovo ? `Remarcar para ${formatarHora(horarioNovo)}` : 'Salvar observações'}
-        </button>
-        <button className="btn btn--ghost" type="button" onClick={onCancel} disabled={enviando}>Cancelar</button>
+      <div className="appt__actions">
+        {podeConfirmar && <button className="btn btn--success btn--sm" type="button" disabled={busy} aria-label={`Confirmar ${descricaoItem}`} onClick={() => onStatus(agendamento, 'CONFIRMADO', 'Agendamento confirmado.')}><Icon name="check" size="sm" />Confirmar</button>}
+        {podeConcluir && <button className="btn btn--success btn--sm" type="button" disabled={busy} aria-label={`Concluir ${descricaoItem}`} onClick={() => onStatus(agendamento, 'CONCLUIDO', 'Agendamento concluído.')}><Icon name="check-circle" size="sm" />Concluir</button>}
+        {podeAvaliar && <Link className="btn btn--primary btn--sm" to={`/dashboard/avaliacoes?agendamento=${agendamento.id}`} aria-label={`Avaliar ${descricaoItem}`}><Icon name="star" size="sm" />Avaliar</Link>}
+        {podeRemarcar && <button className="btn btn--secondary btn--sm" type="button" disabled={busy} aria-label={`Remarcar ${descricaoItem}`} onClick={() => onRemarcar(agendamento)}>Remarcar</button>}
+        {ativo && <button className="btn btn--danger btn--sm" type="button" disabled={busy} aria-label={`Cancelar ${descricaoItem}`} onClick={() => onConfirmar('cancelar', agendamento)}>Cancelar</button>}
+        {isAdmin && <button className="btn btn--ghost btn--sm" type="button" disabled={busy} aria-label={`Excluir ${descricaoItem}`} onClick={() => onConfirmar('excluir', agendamento)}><Icon name="trash" size="sm" /></button>}
       </div>
-    </form>
+    </li>
   )
 }

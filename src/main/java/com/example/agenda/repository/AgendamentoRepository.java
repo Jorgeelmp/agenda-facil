@@ -58,4 +58,6 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
 
     @EntityGraph(attributePaths = {"cliente", "servico", "servico.prestador"})
     List<Agendamento> findAllByOrderByDataHoraDesc();
+
+    boolean existsByClienteId(UUID clienteId);
 }

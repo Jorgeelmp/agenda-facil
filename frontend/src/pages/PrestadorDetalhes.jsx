@@ -1,51 +1,64 @@
-import { useCallback, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Alert } from '../components/Alert'
-import PerfilPrestador from '../components/prestador/PerfilPrestador'
+import { useCallback } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import HorariosPrestador from '../components/prestador/HorariosPrestador'
 import DisponibilidadePrestador from '../components/prestador/DisponibilidadePrestador'
 import AvaliacoesPrestador from '../components/avaliacao/AvaliacoesPrestador'
+import { NotaInline } from '../components/avaliacao/NotaInline'
+import { Avatar, ErrorState, Icon, Loading } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { prestadorApi } from '../services/api'
 import { useApiResource } from '../hooks/useApiResource'
 
+// Página pública do negócio: quem é, quando atende, como agendar e o que dizem os clientes.
 export default function PrestadorDetalhes() {
   const { prestadorId } = useParams()
-  const navigate = useNavigate()
+  const [params] = useSearchParams()
   const { payload } = useAuth()
-  const [revision, setRevision] = useState(0)
-  const refreshAvailability = useCallback(() => setRevision((value) => value + 1), [])
 
   const load = useCallback((options) => prestadorApi.buscar(prestadorId, options), [prestadorId])
-  const { data: perfil, loading, error, retry, update } = useApiResource(load, prestadorId)
+  const { data: perfil, loading, error, retry } = useApiResource(load, prestadorId)
 
-  const canManage = payload?.tipo === 'ADMIN' || (payload?.tipo === 'PRESTADOR' && perfil?.usuarioId === payload?.userId)
+  const dono = payload?.tipo === 'PRESTADOR' && perfil?.usuarioId === payload?.userId
+  const canManage = payload?.tipo === 'ADMIN' || dono
+  const voltar = <Link className="back-link" to="/dashboard/prestadores"><Icon name="arrow-left" size="sm" />Voltar aos prestadores</Link>
+
+  if (loading) return <>{voltar}<Loading>Carregando negócio…</Loading></>
+  if (error) return <>{voltar}<div className="card"><ErrorState message={error.status === 404 ? 'Este negócio não foi encontrado.' : error.message} error={error} onRetry={retry} /></div></>
+  if (!perfil) return null
 
   return (
     <>
-      <Link className="back-link" to={payload?.tipo === 'ADMIN' ? '/dashboard/prestadores' : '/dashboard'}>← Voltar aos prestadores</Link>
-      {loading ? <p className="loading-state" role="status">Carregando negócio…</p> : error ? (
-        <div className="panel"><Alert message={error.status === 404 ? 'Este negócio não foi encontrado.' : error.message} errors={error.errors} /><button className="btn btn--ghost" onClick={retry}>Tentar novamente</button></div>
-      ) : perfil && (
-        <>
-          <div className="page-heading page-heading--actions"><div><h1>{perfil.nomeNegocio}</h1><p>{canManage ? 'Gerencie o negócio e confira a disponibilidade.' : 'Conheça o negócio e os horários de atendimento.'}</p></div>{canManage && <Link className="btn btn--ghost" to={`/dashboard/prestadores/${perfil.id}/servicos`}>Gerenciar serviços</Link>}</div>
-          <div className="business-grid">
-            {canManage ? <PerfilPrestador key={perfil.id} perfil={perfil} onSaved={(value) => { update(value); refreshAvailability() }} onDeleted={() => navigate('/dashboard', { replace: true })} /> : (
-              <section className="panel" aria-labelledby="negocio-title">
-                <div className="panel__header"><h2 id="negocio-title">Sobre o negócio</h2><span className={`badge${perfil.ativo ? ' badge--active' : ''}`}>{perfil.ativo ? 'Ativo' : 'Inativo'}</span></div>
-                <dl className="business-details">
-                  {perfil.descricao && <div><dt>Descrição</dt><dd>{perfil.descricao}</dd></div>}
-                  <div><dt>Endereço</dt><dd>{perfil.endereco || 'Não informado'}</dd></div>
-                  <div><dt>Telefone comercial</dt><dd>{perfil.telefoneComercial || 'Não informado'}</dd></div>
-                </dl>
-              </section>
-            )}
-            <HorariosPrestador prestadorId={perfil.id} canManage={canManage} onChange={refreshAvailability} />
+      {voltar}
+      <section className="card">
+        <div className="profile-head">
+          <Avatar nome={perfil.nomeNegocio} size="lg" />
+          <div>
+            <div className="appt__title">
+              <h1>{perfil.nomeNegocio}</h1>
+              <span className={`badge ${perfil.ativo ? 'badge--active' : 'badge--inactive'}`}>{perfil.ativo ? 'Ativo' : 'Inativo'}</span>
+            </div>
+            <div className="profile-meta">
+              <NotaInline prestadorId={perfil.id} />
+              <span><Icon name="pin" size="sm" />{perfil.endereco || 'Endereço não informado'}</span>
+              <span><Icon name="phone" size="sm" />{perfil.telefoneComercial || 'Telefone não informado'}</span>
+            </div>
           </div>
-          <DisponibilidadePrestador prestadorId={perfil.id} ativo={perfil.ativo} revision={revision} />
-          <AvaliacoesPrestador prestadorId={perfil.id} />
-        </>
-      )}
+          {canManage && (
+            <Link className="btn btn--secondary" to={dono ? '/dashboard/meu-negocio' : `/dashboard/prestadores/${perfil.id}/gerenciar`}>
+              <Icon name="settings" size="sm" />Gerenciar negócio
+            </Link>
+          )}
+        </div>
+        {perfil.descricao && <p className="muted">{perfil.descricao}</p>}
+      </section>
+
+      <div className="layout-2">
+        <DisponibilidadePrestador prestadorId={perfil.id} ativo={perfil.ativo} servicoInicial={params.get('servico') ?? ''} />
+        <aside>
+          <HorariosPrestador prestadorId={perfil.id} canManage={false} />
+        </aside>
+      </div>
+      <AvaliacoesPrestador prestadorId={perfil.id} />
     </>
   )
 }

@@ -1,4 +1,5 @@
 import { Logo } from './Logo'
+import { ThemeToggle } from './ThemeToggle'
 
 const ANO = new Date().getFullYear()
 
@@ -7,6 +8,7 @@ export function AuthLayout({ title, subtitle, children, footer }) {
     <div className="auth">
       <header className="auth__top">
         <Logo />
+        <ThemeToggle />
       </header>
 
       <main className="auth__main">

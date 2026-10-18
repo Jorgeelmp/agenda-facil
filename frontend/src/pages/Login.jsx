@@ -62,7 +62,7 @@ export default function Login() {
           required
         />
 
-        <button className="btn btn--primary" type="submit" disabled={loading || !form.email || !form.senha}>
+        <button className="btn btn--primary btn--block" type="submit" disabled={loading || !form.email || !form.senha}>
           {loading ? <span className="spinner" aria-label="Entrando" /> : 'Entrar'}
         </button>
       </form>
