@@ -1,9 +1,12 @@
 import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert } from '../components/Alert'
+import { NotaInline } from '../components/avaliacao/NotaInline'
+import { Avatar, EmptyState, ErrorState, Icon, Loading, PageHeader } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { prestadorApi } from '../services/api'
 import { useApiResource } from '../hooks/useApiResource'
+
+const SITUACOES = [['ativos', 'Ativos'], ['inativos', 'Inativos'], ['todos', 'Todos']]
 
 export default function Prestadores() {
   const { payload } = useAuth()
@@ -16,37 +19,71 @@ export default function Prestadores() {
   const { data, loading, error, retry } = useApiResource(load, `prestadores:${ativo}`)
   const prestadores = data ?? []
 
-  const encontrados = prestadores.filter((prestador) => prestador.nomeNegocio.toLocaleLowerCase('pt-BR').includes(search.trim().toLocaleLowerCase('pt-BR')))
+  const termo = search.trim().toLocaleLowerCase('pt-BR')
+  const encontrados = prestadores.filter((prestador) => prestador.nomeNegocio.toLocaleLowerCase('pt-BR').includes(termo))
 
   return (
     <>
-      <div className="page-heading page-heading--actions">
-        <div><h1>Prestadores</h1><p>Conheça os negócios e consulte seus horários livres.</p></div>
-        {payload?.tipo === 'PRESTADOR' && <Link className="btn btn--ghost" to="/dashboard/meu-negocio">Gerenciar meu negócio</Link>}
-      </div>
-      <div className="directory-filters">
-        <div className="field">
+      <PageHeader title="Prestadores" description={admin ? 'Negócios cadastrados na plataforma.' : 'Conheça os negócios, veja as avaliações e agende um horário.'}
+        actions={payload?.tipo === 'PRESTADOR' && <Link className="btn btn--secondary" to="/dashboard/meu-negocio">Gerenciar meu negócio</Link>} />
+
+      <div className="toolbar">
+        <div className="field" style={{ flex: '2 1 260px' }}>
           <label className="field__label" htmlFor="buscar-negocio">Buscar negócio</label>
-          <input id="buscar-negocio" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome do negócio" />
+          <div className="field__control search">
+            <Icon name="search" size="sm" />
+            <input id="buscar-negocio" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome do negócio" />
+          </div>
         </div>
-        {admin && <div className="field"><label className="field__label" htmlFor="filtro-situacao">Situação</label><select id="filtro-situacao" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="todos">Todos</option></select></div>}
+        {admin && (
+          <div className="field" style={{ flex: '0 1 180px' }}>
+            <label className="field__label" htmlFor="filtro-situacao">Situação</label>
+            <select id="filtro-situacao" value={filter} onChange={(event) => setFilter(event.target.value)}>
+              {SITUACOES.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
+            </select>
+          </div>
+        )}
       </div>
-      {loading ? <p className="loading-state" role="status">Carregando prestadores…</p> : error ? (
-        <div className="panel"><Alert message={error.message} errors={error.errors} /><button className="btn btn--ghost" onClick={retry}>Tentar novamente</button></div>
+
+      {loading ? <Loading>Carregando prestadores…</Loading> : error ? (
+        <div className="card"><ErrorState error={error} onRetry={retry} /></div>
       ) : encontrados.length === 0 ? (
-        <div className="panel empty-state"><h2>{search.trim() ? 'Nenhum negócio encontrado' : 'Nenhum prestador disponível'}</h2><p>{search.trim() ? 'Tente buscar por outro nome.' : 'Os negócios cadastrados aparecerão aqui.'}</p></div>
-      ) : (
-        <div className="provider-grid">
-          {encontrados.map((prestador) => (
-            <article className="panel provider-card" key={prestador.id}>
-              <div className="panel__header"><h2>{prestador.nomeNegocio}</h2><span className={`badge${prestador.ativo ? ' badge--active' : ''}`}>{prestador.ativo ? 'Ativo' : 'Inativo'}</span></div>
-              {prestador.descricao && <p className="provider-card__description">{prestador.descricao}</p>}
-              {prestador.endereco && <p className="provider-card__meta">{prestador.endereco}</p>}
-              {prestador.telefoneComercial && <p className="provider-card__meta">{prestador.telefoneComercial}</p>}
-              <Link className="btn btn--ghost" to={`/dashboard/prestadores/${prestador.id}`} aria-label={`Ver ${prestador.nomeNegocio}`}>Ver negócio e horários</Link>
-            </article>
-          ))}
+        <div className="card">
+          <EmptyState icon="store" title={termo ? 'Nenhum negócio encontrado' : 'Nenhum prestador disponível'}>
+            {termo ? 'Tente buscar por outro nome.' : 'Os negócios cadastrados aparecerão aqui.'}
+          </EmptyState>
         </div>
+      ) : (
+        <>
+          <p className="result-count" role="status">{encontrados.length} {encontrados.length === 1 ? 'negócio' : 'negócios'}</p>
+          <div className="grid-cards">
+            {encontrados.map((prestador) => (
+              <article className="entity-card" key={prestador.id}>
+                <div className="entity-card__top">
+                  <Avatar nome={prestador.nomeNegocio} />
+                  <div>
+                    <h2>{prestador.nomeNegocio}</h2>
+                    <NotaInline prestadorId={prestador.id} />
+                  </div>
+                  {(admin || !prestador.ativo) && <span className={`badge ${prestador.ativo ? 'badge--active' : 'badge--inactive'}`}>{prestador.ativo ? 'Ativo' : 'Inativo'}</span>}
+                </div>
+                {prestador.descricao && <p className="entity-card__desc">{prestador.descricao}</p>}
+                <div className="entity-card__meta">
+                  {prestador.endereco && <span><Icon name="pin" size="sm" />{prestador.endereco}</span>}
+                  {prestador.telefoneComercial && <span><Icon name="phone" size="sm" />{prestador.telefoneComercial}</span>}
+                </div>
+                <div className="entity-card__footer">
+                  <Link className="btn btn--secondary btn--block" to={`/dashboard/prestadores/${prestador.id}`} aria-label={`Ver ${prestador.nomeNegocio}`}>
+                    {payload?.tipo === 'CLIENTE' ? 'Ver horários e agendar' : 'Ver negócio e horários'}
+                  </Link>
+                  {admin && (
+                    <Link className="btn btn--ghost" to={`/dashboard/prestadores/${prestador.id}/gerenciar`} aria-label={`Gerenciar ${prestador.nomeNegocio}`}><Icon name="settings" size="sm" /></Link>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
       )}
     </>
   )

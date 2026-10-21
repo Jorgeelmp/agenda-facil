@@ -2,21 +2,25 @@ import { useCallback, useId, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { Alert } from '../components/Alert'
 import { Field } from '../components/Field'
+import { ConfirmDialog, EmptyState, ErrorState, Icon, Loading, Modal, PageHeader } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { useApiResource } from '../hooks/useApiResource'
 import { categoriaApi } from '../services/api'
 
 const vazio = { nome: '', descricao: '' }
 
+// Categorias (RF06, RF11): gestão exclusiva do administrador.
 export default function Categorias() {
   const { payload } = useAuth()
+  const notify = useToast()
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(vazio)
   const [deleting, setDeleting] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [success, setSuccess] = useState('')
   const descriptionId = useId()
+  const formId = useId()
   const load = useCallback((options) => categoriaApi.listar(options), [])
   const resource = useApiResource(load, 'categorias', { enabled: payload?.tipo === 'ADMIN' })
 
@@ -24,25 +28,21 @@ export default function Categorias() {
 
   function edit(value) {
     setEditing(value)
-    setForm(value ? { nome: value.nome, descricao: value.descricao ?? '' } : vazio)
-    setDeleting(null)
+    setForm(value && value !== 'nova' ? { nome: value.nome, descricao: value.descricao ?? '' } : vazio)
     setError(null)
-    setSuccess('')
   }
 
   async function save(event) {
     event.preventDefault()
     setError(null)
-    setSuccess('')
     if (!form.nome.trim()) { setError({ message: 'Nome da categoria é obrigatório.' }); return }
     setBusy(true)
     try {
       const body = { nome: form.nome.trim(), descricao: form.descricao.trim() || null }
-      if (editing) await categoriaApi.atualizar(editing.id, body)
+      if (editing !== 'nova') await categoriaApi.atualizar(editing.id, body)
       else await categoriaApi.criar(body)
-      setSuccess(editing ? 'Categoria atualizada.' : 'Categoria criada.')
+      notify(editing !== 'nova' ? 'Categoria atualizada.' : 'Categoria criada.')
       setEditing(null)
-      setForm(vazio)
       resource.retry()
     } catch (err) { setError(err) } finally { setBusy(false) }
   }
@@ -50,41 +50,73 @@ export default function Categorias() {
   async function remove() {
     setBusy(true)
     setError(null)
-    setSuccess('')
     try {
       await categoriaApi.excluir(deleting.id)
-      if (editing?.id === deleting.id) { setEditing(null); setForm(vazio) }
       setDeleting(null)
-      setSuccess('Categoria excluída.')
+      notify('Categoria excluída.')
       resource.retry()
     } catch (err) { setError(err) } finally { setBusy(false) }
   }
 
   return (
     <>
-      <div className="page-heading"><h1>Categorias</h1><p>Organize as classificações usadas pelos prestadores. Gestão exclusiva de administradores.</p></div>
-      {error && <Alert message={error.message} errors={error.errors} />}
-      {success && <Alert type="success" message={success} />}
-      <div className="business-grid">
-        <section className="panel"><div className="panel__header"><h2>{editing ? 'Editar categoria' : 'Nova categoria'}</h2></div>
-          <form className="form" onSubmit={save} aria-label={editing ? 'Editar categoria' : 'Nova categoria'}>
+      <PageHeader title="Categorias" description="Organize as classificações usadas pelos prestadores. Gestão exclusiva de administradores."
+        actions={<button className="btn btn--primary" type="button" onClick={() => edit('nova')}><Icon name="plus" size="sm" />Nova categoria</button>} />
+
+      <section className="card card--flush" aria-label="Categorias cadastradas">
+        <div className="card__header"><div><h2>Categorias cadastradas</h2>{resource.data && <p>{resource.data.length} {resource.data.length === 1 ? 'categoria' : 'categorias'}</p>}</div></div>
+        {resource.loading ? <Loading>Carregando categorias…</Loading> : resource.error ? <div style={{ padding: 20 }}><ErrorState error={resource.error} onRetry={resource.retry} /></div> : resource.data?.length ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead><tr><th scope="col">Nome</th><th scope="col">Descrição</th><th scope="col"><span className="sr-only">Ações</span></th></tr></thead>
+              <tbody>
+                {resource.data.map((c) => (
+                  <tr key={c.id}>
+                    <th scope="row">{c.nome}</th>
+                    <td className="cell-wrap muted">{c.descricao || '—'}</td>
+                    <td>
+                      <div className="form-actions" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+                        <Link className="btn btn--ghost btn--sm" to={`/dashboard/servicos?categoriaId=${c.id}`}>Ver serviços</Link>
+                        <button className="btn btn--ghost btn--sm" disabled={busy} onClick={() => edit(c)} aria-label={`Editar ${c.nome}`}><Icon name="edit" size="sm" />Editar</button>
+                        <button className="btn btn--ghost btn--sm" disabled={busy} onClick={() => { setError(null); setDeleting(c) }} aria-label={`Excluir ${c.nome}`}><Icon name="trash" size="sm" />Excluir</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState icon="tag" title="Nenhuma categoria cadastrada"
+            actions={<button className="btn btn--primary" type="button" onClick={() => edit('nova')}>Criar primeira categoria</button>}>
+            Crie a primeira categoria para os prestadores classificarem seus serviços.
+          </EmptyState>
+        )}
+      </section>
+
+      {editing && (
+        <Modal title={editing === 'nova' ? 'Nova categoria' : 'Editar categoria'} onClose={() => setEditing(null)} busy={busy} footer={(
+          <>
+            <button className="btn btn--secondary" type="button" onClick={() => setEditing(null)} disabled={busy}>Cancelar</button>
+            <button className="btn btn--primary" type="submit" form={formId} disabled={busy}>{busy ? 'Salvando…' : editing !== 'nova' ? 'Salvar categoria' : 'Criar categoria'}</button>
+          </>
+        )}>
+          <form id={formId} className="form" onSubmit={save} aria-label={editing !== 'nova' ? 'Editar categoria' : 'Nova categoria'}>
+            {error && <Alert message={error.message} errors={error.errors} />}
             <fieldset className="form-fields" disabled={busy}>
               <Field label="Nome da categoria" required maxLength={100} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
               <div className="field"><label className="field__label" htmlFor={descriptionId}>Descrição<span className="field__hint">Opcional</span></label><textarea id={descriptionId} maxLength={255} rows={3} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} /></div>
-              <div className="form-actions"><button className="btn btn--primary" type="submit">{busy ? 'Salvando…' : editing ? 'Salvar categoria' : 'Criar categoria'}</button>{editing && <button className="btn btn--ghost" type="button" onClick={() => edit(null)}>Cancelar edição</button>}</div>
             </fieldset>
           </form>
-        </section>
-        <section className="panel"><div className="panel__header"><h2>Categorias cadastradas</h2></div>
-          {resource.loading ? <p role="status">Carregando categorias…</p> : resource.error ? <><Alert message={resource.error.message} /><button className="btn btn--ghost" onClick={resource.retry}>Tentar novamente</button></> : resource.data?.length ? (
-            <ul className="catalog-list">{resource.data.map((c) => <li key={c.id}>
-              <h3>{c.nome}</h3>{c.descricao && <p className="provider-card__description">{c.descricao}</p>}
-              <div className="form-actions"><Link to={`/dashboard/servicos?categoriaId=${c.id}`}>Ver serviços</Link><button className="btn btn--ghost" disabled={busy} onClick={() => edit(c)} aria-label={`Editar ${c.nome}`}>Editar</button><button className="btn btn--danger" disabled={busy} onClick={() => { setDeleting(c); setError(null); setSuccess('') }} aria-label={`Excluir ${c.nome}`}>Excluir</button></div>
-            </li>)}</ul>
-          ) : <p className="empty-state">Nenhuma categoria cadastrada. Crie a primeira categoria para os prestadores classificarem seus serviços.</p>}
-          {deleting && <div className="confirm-action" role="group" aria-label="Confirmar exclusão de categoria"><p>Excluir a categoria <strong>{deleting.nome}</strong>? Categorias vinculadas a serviços não podem ser excluídas.</p><div className="form-actions"><button className="btn btn--danger" disabled={busy} onClick={remove}>Confirmar exclusão</button><button className="btn btn--ghost" disabled={busy} onClick={() => setDeleting(null)}>Cancelar</button></div></div>}
-        </section>
-      </div>
+        </Modal>
+      )}
+
+      {deleting && (
+        <ConfirmDialog title={`Excluir a categoria ${deleting.nome}?`} confirmLabel="Confirmar exclusão" busyLabel="Excluindo…" busy={busy} error={error}
+          onConfirm={remove} onClose={() => { setDeleting(null); setError(null) }}>
+          Categorias vinculadas a serviços não podem ser excluídas.
+        </ConfirmDialog>
+      )}
     </>
   )
 }

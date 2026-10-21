@@ -71,6 +71,9 @@ export const authApi = {
 export const usuarioApi = {
   listar: (options) => request('/usuarios', options),
   resumo: (options) => request('/usuarios/resumo', options),
+  minhaConta: (options) => request('/usuarios/me', options),
+  atualizarMinhaConta: (body) => request('/usuarios/me', { method: 'PUT', body }),
+  excluir: (id) => request(`/usuarios/${id}`, { method: 'DELETE' }),
 }
 
 export const prestadorApi = {
