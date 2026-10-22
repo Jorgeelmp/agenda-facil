@@ -311,7 +311,15 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); widt
 .chip.is-active { background: var(--text); border-color: var(--text); color: var(--bg); }
 .chip__count { font-size: 11.5px; opacity: .7; }
 
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
 .tab { display: inline-flex; align-items: center; gap: 7px; padding: 10px 12px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-2); font-weight: 500; cursor: pointer; white-space: nowrap; text-decoration: none; }
 .tab:hover { color: var(--text); text-decoration: none; }
 .tab.is-active { color: var(--text); border-bottom-color: var(--primary); }

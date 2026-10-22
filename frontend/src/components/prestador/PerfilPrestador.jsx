@@ -4,11 +4,15 @@ import { Field } from '../Field'
 import { ConfirmDialog } from '../ui'
 import { useToast } from '../../context/ToastContext'
 import { prestadorApi } from '../../services/api'
+import { mascaraTelefone, telefoneValido } from '../../utils/telefone'
 
 const EMPTY = { nomeNegocio: '', descricao: '', endereco: '', telefoneComercial: '' }
 
 function toForm(perfil) {
-  return Object.fromEntries(Object.keys(EMPTY).map((campo) => [campo, perfil?.[campo] ?? '']))
+  return Object.fromEntries(Object.keys(EMPTY).map((campo) => [
+    campo,
+    campo === 'telefoneComercial' ? mascaraTelefone(perfil?.[campo]) : (perfil?.[campo] ?? ''),
+  ]))
 }
 
 // Dados do negócio (RF02) + ativação/inativação e exclusão do perfil.
@@ -29,7 +33,8 @@ export default function PerfilPrestador({ perfil, onSaved, onDeleted }) {
   }, [])
 
   const update = (event) => {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
+    const { name, value } = event.target
+    setForm((current) => ({ ...current, [name]: name === 'telefoneComercial' ? mascaraTelefone(value) : value }))
   }
 
   async function run(action, message, { onSuccess, resetForm = false, onError = setError } = {}) {
@@ -63,6 +68,10 @@ export default function PerfilPrestador({ perfil, onSaved, onDeleted }) {
     }
     if (Object.values(form).some((value) => value.includes('\0'))) {
       setError({ message: 'Remova os caracteres inválidos dos dados do negócio.', errors: [] })
+      return
+    }
+    if (!telefoneValido(form.telefoneComercial)) {
+      setError({ message: 'Informe um telefone comercial válido com DDD.', errors: [] })
       return
     }
     const body = {
@@ -101,7 +110,7 @@ export default function PerfilPrestador({ perfil, onSaved, onDeleted }) {
               <textarea id={descriptionId} name="descricao" maxLength={500} rows={4} value={form.descricao} onChange={update} placeholder="Conte o que você faz e o que diferencia seu atendimento." />
             </div>
             <Field label="Endereço" hint="Opcional" name="endereco" maxLength={255} value={form.endereco} onChange={update} autoComplete="street-address" />
-            <Field label="Telefone comercial" hint="Opcional" name="telefoneComercial" type="tel" maxLength={20} value={form.telefoneComercial} onChange={update} autoComplete="tel" />
+            <Field label="Telefone comercial" hint="Opcional" name="telefoneComercial" type="tel" maxLength={15} inputMode="numeric" placeholder="(48) 99999-9999" value={form.telefoneComercial} onChange={update} autoComplete="tel" />
           </fieldset>
           <div className="form-actions">
             <button className="btn btn--primary" type="submit" disabled={busy}>
